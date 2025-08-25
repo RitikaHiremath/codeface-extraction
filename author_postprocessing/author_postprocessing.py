@@ -181,7 +181,7 @@ def fix_github_browser_commits(data_path, issues_github_list, commits_list, auth
             commit_data_file = path.join(data_path, commits_list)
             commit_data = csv_writer.read_from_csv(commit_data_file)
             commit_hash_to_author = {commit[7]: commit[2:4] for commit in commit_data}
-
+            author_name_to_data = {author[1]: author[1:3] for author in author_data_new}
             issue_data_new = []
 
             for event in issue_data:
@@ -189,11 +189,15 @@ def fix_github_browser_commits(data_path, issues_github_list, commits_list, auth
                 if is_github_noreply_author(event[9], event[10]) and event[8] == commit_added_event:
                     # extract commit hash from event info 1
                     commit_hash = event[12]
-
+                    name = event[13][1:-1]
                     # extract commit author from commit data, if available
                     if commit_hash in commit_hash_to_author:
                         event[9] = commit_hash_to_author[commit_hash][0]
                         event[10] = commit_hash_to_author[commit_hash][1]
+                        issue_data_new.append(event)
+                    elif name in author_name_to_data:
+                        event[9] = author_name_to_data[name][0]
+                        event[10] = author_name_to_data[name][1]
                         issue_data_new.append(event)
                     else:
                         # the added commit is not part of the commit data. In most cases, this is due to merge commits

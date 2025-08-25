@@ -364,6 +364,7 @@ def merge_issue_events(issue_data):
             # it is a commit which was added to the pull request
             if rel_commit["type"] == "commitAddedToPullRequest":
                 rel_commit["event"] = "commit_added"
+                rel_commit["event_info_2"] = rel_commit["commit"]["author"]
 
             # if the related commit was mentioned in an issue comment:
             elif rel_commit["type"] == "commitMentionedInIssue":
@@ -750,6 +751,9 @@ def insert_user_data(issues, conf, resdir):
         for event in issue["eventsList"]:
             event["user"] = get_id_and_update_user(event["user"])
 
+            if event["event"] == "commit_added":
+                event["event_info_2"] = get_id_and_update_user(event["event_info_2"])
+
             # check database for the reference-target user if needed
             if event["ref_target"] != "":
                 event["ref_target"] = get_id_and_update_user(event["ref_target"])
@@ -762,6 +766,10 @@ def insert_user_data(issues, conf, resdir):
         # get event authors
         for event in issue["eventsList"]:
             event["user"] = get_user_from_id(event["user"])
+
+            # for commit_added events, save the commit's author's name in event_info_2
+            if event["event"] == "commit_added":
+                event["event_info_2"] = get_user_from_id(event["event_info_2"])["name"]
 
             # get the reference-target user if needed
             if event["ref_target"] != "":
