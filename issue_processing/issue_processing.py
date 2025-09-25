@@ -31,6 +31,7 @@ import json
 import os
 import sys
 from datetime import datetime, timedelta
+import math
 from logging import getLogger
 
 from codeface_utils.cluster.idManager import dbIdManager, csvIdManager
@@ -55,6 +56,9 @@ known_resolutions = {"unresolved", "fixed", "wontfix", "duplicate", "invalid", "
 
 # datetime format string
 datetime_format = "%Y-%m-%d %H:%M:%S"
+
+filtered_connected_events = dict()
+external_connected_events = dict()
 
 def run():
     # get all needed paths and arguments for the method call.
@@ -297,6 +301,7 @@ def merge_issue_events(issue_data):
     log.info("Merge issue events ...")
 
     issue_data_to_update = dict()
+    connected_events = dict()
 
     for issue in issue_data:
 
@@ -493,6 +498,28 @@ def merge_issue_events(issue_data):
                 event["ref_target"] = event["user"]
                 event["user"] = event["assigner"]
 
+            # if event is merged event, save the hash of the merge commit in event_info_1
+            if event["event"] == "merged":
+                event["event_info_1"] = event["commit"]["hash"]
+
+            # if event is connected event, create or add to a matching dict entry by matching timestamps, for later reconstruction
+            if event["event"] == "connected":
+                if event["created_at"] in connected_events.keys() and connected_events[event["created_at"]]["user"] == event["user"]:
+                    connected_events[event["created_at"]]["issues"].append(issue["number"])
+                elif subtract_seconds_from_time(event["created_at"], 1) in connected_events.keys() \
+                        and connected_events[subtract_seconds_from_time(event["created_at"], 1)]["user"] == event["user"]:
+                    connected_events[subtract_seconds_from_time(event["created_at"], 1)]["issues"].append(issue["number"])
+                    event["created_at"] = subtract_seconds_from_time(event["created_at"], 1)
+                elif subtract_seconds_from_time(event["created_at"], -1) in connected_events.keys() \
+                        and connected_events[subtract_seconds_from_time(event["created_at"], -1)]["user"] == event["user"]:
+                    connected_events[subtract_seconds_from_time(event["created_at"], -1)]["issues"].append(issue["number"])
+                    event["created_at"] = subtract_seconds_from_time(event["created_at"], -1)
+                else:
+                    connected_info = dict()
+                    connected_info["issues"] = [issue["number"]]
+                    connected_info["user"] = issue["user"]
+                    connected_events[event["created_at"]] = connected_info
+
         # merge events, relatedCommits, relatedIssues and comment lists
         issue["eventsList"] = issue["commentsList"] + issue["eventsList"] + issue["relatedIssues"] + issue[
             "relatedCommits"] + issue["reviewsList"]
@@ -504,6 +531,10 @@ def merge_issue_events(issue_data):
         # sorts eventsList by time
         issue["eventsList"] = sorted(issue["eventsList"], key=lambda k: k["created_at"])
 
+    # filter out connected events which cannot be perfectly matched
+    global filtered_connected_events
+    filtered_connected_events = dict(filter(lambda item: filter_connected_events(item[0], item[1]), connected_events.iteritems()))
+
     # updates all the issues by the temporarily stored referenced_by events
     for _, value in issue_data_to_update.items():
         for issue in issue_data:
@@ -511,6 +542,41 @@ def merge_issue_events(issue_data):
                 issue["eventsList"] = issue["eventsList"] + value["eventsList"]
 
     return issue_data
+
+
+def filter_connected_events(key, value):
+    num_issues = len(value["issues"])
+    global external_connected_events
+    # if only a single connected event exists at this time, it has to be connecting to an external issue
+    if num_issues == 1:
+        external_connected_events[key] = value
+        return False
+    # if 2 connected events exist, matching them is trivial
+    if num_issues == 2:
+        return True
+    occurances = {x: value["issues"].count(x) for x in set(value["issues"])}
+    # otherwise, if it is an even number, check if it can be easily matched,
+    # meaning that exactly half the events occur in the same issue
+    if num_issues % 2 == 0 and num_issues/2 in occurances.values():
+        # duplicate issue list for matching the issues later
+        value["multi_issues_copy"] = list(value["issues"])
+        return True
+    # if it is an odd number, check if it can be easily matched
+    # meaning that exactly half (rounded up) the events occur in the same issue
+    if num_issues % 2 == 1 and math.ceil(num_issues/2) in occurances.values():
+        for sub_key, sub_value in occurances.iteritems():
+            # then, assign one of them as an external connected event and proceed as in previous case
+            if sub_value == math.ceil(num_issues/2):
+                new_entry = dict()
+                new_entry["user"] = value["user"]
+                new_entry["issues"] = [sub_key]
+                external_connected_events[key] = new_entry
+                value["issues"].remove(sub_key)
+                # duplicate issue list for matching the issues later
+                value["multi_issues_copy"] = list(value["issues"])
+                return True
+    # no other variants can be easily matched
+    return False
 
 
 def reformat_events(issue_data):
@@ -542,6 +608,37 @@ def reformat_events(issue_data):
             # 3) add or update users which are ref_target of the current event
             if event["ref_target"] is not None and not event["ref_target"] == "":
                 users = update_user_dict(users, event["ref_target"])
+
+            # reconstruction of connections
+            if event["event"] == "connected":
+                external = False
+                # check if event is external
+                for key, value in external_connected_events.iteritems():
+                    if issue["number"] in value["issues"]:
+                        if key == event["created_at"]:
+                            external = True
+                            event["event_info_1"] = "external"
+                            value["issues"].remove(issue["number"])
+                # if so, skip the next checks
+                if external:
+                    continue
+                # otherwise, it must be internal
+                for key, value in filtered_connected_events.iteritems():
+                    if issue["number"] in value["issues"]:
+                        if key == event["created_at"]:
+                            if len(value["issues"]) == 2:
+                                # if only 2 events occured at this timestamp, matching the issues is trivial
+                                event["event_info_1"] = value["issues"][0] if value["issues"][1] == issue["number"] else value["issues"][1]
+                            else:
+                                occurances = {x: value["issues"].count(x) for x in set(value["issues"])}
+                                if occurances[issue["number"]] == max(occurances.values()):
+                                    # otherwise, if current issue is the centerpiece of all connected events, use previous copy to match issues
+                                    number = next(x for x in value["multi_issues_copy"] if x != issue["number"])
+                                    value["multi_issues_copy"].remove(number)
+                                    event["event_info_1"] = number
+                                else:
+                                    # if current issue is not the centerpiece, connect it to the centerpiece
+                                    event["event_info_1"] = max(occurances, key = occurances.get)
 
     # as the user dictionary is created, start re-formating the event information of all issues
     for issue in issue_data:
