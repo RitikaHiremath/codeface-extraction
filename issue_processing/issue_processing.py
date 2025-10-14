@@ -907,7 +907,7 @@ def print_to_disk(issues, results_folder):
                 json.dumps(issue["resolution"]),
                 issue["created_at"],
                 issue["closed_at"],
-                json.dumps([]),  # components
+                json.dumps([issue["subIssues"]]),  # components
                 event["event"],
                 event["user"]["name"],
                 event["user"]["email"],
