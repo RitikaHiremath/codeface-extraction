@@ -57,9 +57,6 @@ known_resolutions = {"unresolved", "fixed", "wontfix", "duplicate", "invalid", "
 # datetime format string
 datetime_format = "%Y-%m-%d %H:%M:%S"
 
-filtered_connected_events = dict()
-external_connected_events = dict()
-
 def run():
     # get all needed paths and arguments for the method call.
     parser = argparse.ArgumentParser(prog='codeface-extraction-issues-github', description='Codeface extraction')
@@ -84,9 +81,10 @@ def run():
     # 2) re-format the issues
     reformat_issues(issues)
     # 3) merges all issue events into one list
-    merge_issue_events(issues)
+    external_connected_events = dict()
+    filtered_connected_events = merge_issue_events(issues, external_connected_events)
     # 4) re-format the eventsList of the issues
-    reformat_events(issues)
+    reformat_events(issues, filtered_connected_events, external_connected_events)
     # 5) update user data with Codeface database and dump username-to-name/e-mail list
     insert_user_data(issues, __conf, __resdir)
     # 6) dump result to disk
@@ -293,7 +291,7 @@ def reformat_issues(issue_data):
     return
 
 
-def merge_issue_events(issue_data):
+def merge_issue_events(issue_data, external_connected_events):
     """
     All issue events are merged together in the eventsList. This simplifies processing in later steps.
 
@@ -535,8 +533,7 @@ def merge_issue_events(issue_data):
         issue["eventsList"] = sorted(issue["eventsList"], key=lambda k: k["created_at"])
 
     # filter out connected events which cannot be perfectly matched
-    global filtered_connected_events
-    filtered_connected_events = dict(filter(lambda item: filter_connected_events(item[0], item[1]), connected_events.iteritems()))
+    filtered_connected_events = dict(filter(lambda item: filter_connected_events(item[0], item[1], external_connected_events), connected_events.items()))
 
     # updates all the issues by the temporarily stored referenced_by events
     for _, value in issue_data_to_update.items():
@@ -544,12 +541,11 @@ def merge_issue_events(issue_data):
             if issue["number"] == value["number"]:
                 issue["eventsList"] = issue["eventsList"] + value["eventsList"]
 
-    return
+    return filtered_connected_events
 
 
-def filter_connected_events(key, value):
+def filter_connected_events(key, value, external_connected_events):
     num_issues = len(value["issues"])
-    global external_connected_events
     # if only a single connected event exists at this time, it has to be connecting to an external issue
     if num_issues == 1:
         external_connected_events[key] = value
@@ -582,7 +578,7 @@ def filter_connected_events(key, value):
     return False
 
 
-def reformat_events(issue_data):
+def reformat_events(issue_data, filtered_connected_events, external_connected_events):
     """
     Re-format event information dependent on the event type.
 
@@ -614,34 +610,23 @@ def reformat_events(issue_data):
 
             # reconstruction of connections
             if event["event"] == "connected":
-                external = False
-                # check if event is external
-                for key, value in external_connected_events.iteritems():
-                    if issue["number"] in value["issues"]:
-                        if key == event["created_at"]:
-                            external = True
-                            event["event_info_1"] = "external"
-                            value["issues"].remove(issue["number"])
-                # if so, skip the next checks
-                if external:
-                    continue
-                # otherwise, it must be internal
-                for key, value in filtered_connected_events.iteritems():
-                    if issue["number"] in value["issues"]:
-                        if key == event["created_at"]:
-                            if len(value["issues"]) == 2:
-                                # if only 2 events occured at this timestamp, matching the issues is trivial
-                                event["event_info_1"] = value["issues"][0] if value["issues"][1] == issue["number"] else value["issues"][1]
-                            else:
-                                occurances = {x: value["issues"].count(x) for x in set(value["issues"])}
-                                if occurances[issue["number"]] == max(occurances.values()):
-                                    # otherwise, if current issue is the centerpiece of all connected events, use previous copy to match issues
-                                    number = next(x for x in value["multi_issues_copy"] if x != issue["number"])
-                                    value["multi_issues_copy"].remove(number)
-                                    event["event_info_1"] = number
-                                else:
-                                    # if current issue is not the centerpiece, connect it to the centerpiece
-                                    event["event_info_1"] = max(occurances, key = occurances.get)
+                if event["created_at"] in external_connected_events \
+                    and issue["number"] in external_connected_events[event["created_at"]]["issues"]:
+                    event["event_info_1"] = "external"
+                    external_connected_events[event["created_at"]]["issues"].remove(issue["number"])
+                elif event["created_at"] in filtered_connected_events \
+                    and issue["number"] in filtered_connected_events[event["created_at"]]["issues"]:
+                    value = filtered_connected_events[event["created_at"]]
+                    if len(value["issues"]) == 2:
+                        event["event_info_1"] = value["issues"][0] if value["issues"][1] == issue["number"] else value["issues"][1]
+                    else:
+                        occurances = {x: value["issues"].count(x) for x in set(value["issues"])}
+                        if occurances[issue["number"]] == max(occurances.values()):
+                            number = next(x for x in value["multi_issues_copy"] if x != issue["number"])
+                            value["multi_issues_copy"].remove(number)
+                            event["event_info_1"] = number
+                        else:
+                            event["event_info_1"] = max(occurances, key = occurances.get)
 
     # as the user dictionary is created, start re-formating the event information of all issues
     for issue in issue_data:
@@ -677,7 +662,7 @@ def reformat_events(issue_data):
                 event["event_info_1"] = label
 
                 # if the label is in this list, it also is a type of the issue
-                if label in known_types:
+                if label in known_types and label not in issue["type"]:
                     issue["type"].append(str(label))
 
                     # creates an event for type updates and adds it to the eventsList
