@@ -657,13 +657,16 @@ def reformat_events(issue_data):
             if event["event"] == "closed":
                 event["event"] = "state_updated"
                 event["event_info_1"] = "closed"  # new state
-                event["event_info_2"] = "open"  # old state
+                if event["commit"] is not None:
+                    event["event_info_2"] = event["commit"]["hash"]
+                else:
+                    event["event_info_2"] = event["state_reason"]
                 issue["state_new"] = "closed"
 
             elif event["event"] == "reopened":
                 event["event"] = "state_updated"
                 event["event_info_1"] = "open"  # new state
-                event["event_info_2"] = "closed"  # old state
+                event["event_info_2"] = event["state_reason"]
                 issue["state_new"] = "reopened"
 
             elif event["event"] == "labeled":
