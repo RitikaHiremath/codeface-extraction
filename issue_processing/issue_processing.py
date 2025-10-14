@@ -82,13 +82,13 @@ def run():
     # 1) load the list of issues
     issues = load(__srcdir)
     # 2) re-format the issues
-    issues = reformat_issues(issues)
+    reformat_issues(issues)
     # 3) merges all issue events into one list
-    issues = merge_issue_events(issues)
+    merge_issue_events(issues)
     # 4) re-format the eventsList of the issues
-    issues = reformat_events(issues)
+    reformat_events(issues)
     # 5) update user data with Codeface database and dump username-to-name/e-mail list
-    issues = insert_user_data(issues, __conf, __resdir)
+    insert_user_data(issues, __conf, __resdir)
     # 6) dump result to disk
     print_to_disk(issues, __resdir)
 
@@ -287,7 +287,7 @@ def reformat_issues(issue_data):
         else:
             issue["type"].append("issue")
 
-    return issue_data
+    return
 
 
 def merge_issue_events(issue_data):
@@ -541,7 +541,7 @@ def merge_issue_events(issue_data):
             if issue["number"] == value["number"]:
                 issue["eventsList"] = issue["eventsList"] + value["eventsList"]
 
-    return issue_data
+    return
 
 
 def filter_connected_events(key, value):
@@ -750,7 +750,7 @@ def reformat_events(issue_data):
         for event_to_remove in events_to_remove:
             issue["eventsList"].remove(event_to_remove)
 
-    return issue_data
+    return
 
 
 def insert_user_data(issues, conf, resdir):
@@ -889,7 +889,7 @@ def insert_user_data(issues, conf, resdir):
     username_dump = os.path.join(resdir, "usernames.list")
     csv_writer.write_to_csv(username_dump, sorted(set(lines), key=lambda line: line[0]))
 
-    return issues
+    return
 
 
 def print_to_disk(issues, results_folder):
