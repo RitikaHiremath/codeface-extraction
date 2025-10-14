@@ -303,9 +303,12 @@ def parse_xml(issue_data, persons, skip_history, referenced_bys):
         link = issue_x.getElementsByTagName("link")[0]
         issue["url"] = link.firstChild.data
 
-        type = issue_x.getElementsByTagName("type")[0]
-        issue["type"] = type.firstChild.data
-        issue["type_list"] = ["issue", str(type.firstChild.data.lower())]
+        type = issue_x.getElementsByTagName("type")[0].firstChild.data
+        # rename 'new feature' type to 'feature' to be in line with the github original issue type
+        if type == "New Feature":
+            type = "Feature"
+        issue["type"] = type
+        issue["type_list"] = ["issue", str(type.lower())]
 
         status = issue_x.getElementsByTagName("status")[0]
         issue["state"] = status.firstChild.data

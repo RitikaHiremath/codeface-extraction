@@ -46,7 +46,7 @@ setup_logging()
 log = getLogger(__name__)
 
 # known types from JIRA and GitHub default labels
-known_types = {"bug", "improvement", "enhancement", "new feature", "task", "test", "wish"}
+known_types = {"bug", "improvement", "enhancement", "feature", "task", "test", "wish"}
 
 # known resolutions from JIRA and GitHub default labels
 known_resolutions = {"unresolved", "fixed", "wontfix", "duplicate", "invalid", "incomplete", "cannot reproduce",
@@ -246,7 +246,10 @@ def reformat_issues(issue_data):
     for issue in issue_data:
 
         # empty container for issue types
-        issue["type"] = []
+        if issue["type"] is None:
+            issue["type"] = []
+        else:
+            issue["type"] = [issue["type"]["name"].lower()]
 
         # empty container for issue resolutions
         issue["resolution"] = []
