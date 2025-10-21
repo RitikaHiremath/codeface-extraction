@@ -19,6 +19,7 @@
 # Copyright 2020-2021 by Thomas Bock <bockthom@cs.uni-saarland.de>
 # Copyright 2026 by Thomas Bock <bockthom@cmu.edu>
 # Copyright 2023, 2025 by Maximilian Löffler <s8maloef@stud.uni-saarland.de>
+# Copyright 2025 by Leo Sendelbach <s8lesend@stud.uni-saarland.de>
 # All Rights Reserved.
 """
 This file is able to extract Jira issue data from xml files.
@@ -128,7 +129,7 @@ def run():
                 referenced_issue["history"].append(referenced_by)
 
     # 5) update user data with Codeface database
-    processed_issues = insert_user_data(processed_issues, __conf)
+    insert_user_data(processed_issues, __conf)
     # 6) dump result to disk
     print_to_disk(processed_issues, __resdir)
     # # 7) export for Gephi
@@ -695,7 +696,7 @@ def insert_user_data(issues, conf):
                 event["event_info_2"] = assigned_user["email"]
 
     log.debug("number of issues after insert_user_data: '{}'".format(len(issues)))
-    return issues
+    return
 
 
 def print_to_disk(issues, results_folder):
