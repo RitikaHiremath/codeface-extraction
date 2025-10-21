@@ -80,10 +80,15 @@ def run():
     issues = load(__srcdir)
     # 2) re-format the issues
     reformat_issues(issues)
-    # 3) merges all issue events into one list
+    # create an empty dict for external connected events, meaning connected
+    # events that connect to an issue in another repository
     external_connected_events = dict()
+    # 3) merges all issue events into one list
+    # this step returns a dict containing all connected events that can be matched to the correct issues later
     filtered_connected_events = merge_issue_events(issues, external_connected_events)
     # 4) re-format the eventsList of the issues
+    # this step also reconstructs the connections previously stored
+    # in 'external_connected_events' and 'filtered_connected_events'
     reformat_events(issues, filtered_connected_events, external_connected_events)
     # 5) update user data with Codeface database and dump username-to-name/e-mail list
     insert_user_data(issues, __conf, __resdir)
@@ -506,16 +511,20 @@ def merge_issue_events(issue_data, external_connected_events):
             # if event is connected event, create or add to a matching dict entry by matching timestamps, for later reconstruction
             if event["event"] == "connected":
                 if event["created_at"] in connected_events.keys() and connected_events[event["created_at"]]["user"] == event["user"]:
+                    # if there is already a connected event at this time by this user, add this event to the list
                     connected_events[event["created_at"]]["issues"].append(issue["number"])
                 elif subtract_seconds_from_time(event["created_at"], 1) in connected_events.keys() \
                         and connected_events[subtract_seconds_from_time(event["created_at"], 1)]["user"] == event["user"]:
+                    # same as above, but accounting for a possible difference in timestamps of 1 second between matching events
                     connected_events[subtract_seconds_from_time(event["created_at"], 1)]["issues"].append(issue["number"])
                     event["created_at"] = subtract_seconds_from_time(event["created_at"], 1)
                 elif subtract_seconds_from_time(event["created_at"], -1) in connected_events.keys() \
                         and connected_events[subtract_seconds_from_time(event["created_at"], -1)]["user"] == event["user"]:
+                    # same as above, with offset calculated in the other direction
                     connected_events[subtract_seconds_from_time(event["created_at"], -1)]["issues"].append(issue["number"])
                     event["created_at"] = subtract_seconds_from_time(event["created_at"], -1)
                 else:
+                    # if there is no connected event yet at this timestamp, create a new entry for this event
                     connected_info = dict()
                     connected_info["issues"] = [issue["number"]]
                     connected_info["user"] = issue["user"]
@@ -553,19 +562,19 @@ def filter_connected_events(key, value, external_connected_events):
     # if 2 connected events exist, matching them is trivial
     if num_issues == 2:
         return True
-    occurances = {x: value["issues"].count(x) for x in set(value["issues"])}
+    occurences = {x: value["issues"].count(x) for x in set(value["issues"])}
     # otherwise, if it is an even number, check if it can be easily matched,
     # meaning that exactly half the events occur in the same issue
-    if num_issues % 2 == 0 and num_issues/2 in occurances.values():
+    if num_issues % 2 == 0 and num_issues/2 in occurences.values():
         # duplicate issue list for matching the issues later
         value["multi_issues_copy"] = list(value["issues"])
         return True
     # if it is an odd number, check if it can be easily matched
     # meaning that exactly half (rounded up) the events occur in the same issue
-    if num_issues % 2 == 1 and math.ceil(num_issues/2) in occurances.values():
-        for sub_key, sub_value in occurances.iteritems():
+    if num_issues % 2 == 1 and (num_issues + 1)/2 in occurences.values():
+        for sub_key, sub_value in occurences.iteritems():
             # then, assign one of them as an external connected event and proceed as in previous case
-            if sub_value == math.ceil(num_issues/2):
+            if sub_value == (num_issues + 1)/2:
                 new_entry = dict()
                 new_entry["user"] = value["user"]
                 new_entry["issues"] = [sub_key]
@@ -612,21 +621,30 @@ def reformat_events(issue_data, filtered_connected_events, external_connected_ev
             if event["event"] == "connected":
                 if event["created_at"] in external_connected_events \
                     and issue["number"] in external_connected_events[event["created_at"]]["issues"]:
+                    # if the event is an external connected event, mark it as such and remove this issue from the list
                     event["event_info_1"] = "external"
                     external_connected_events[event["created_at"]]["issues"].remove(issue["number"])
                 elif event["created_at"] in filtered_connected_events \
                     and issue["number"] in filtered_connected_events[event["created_at"]]["issues"]:
+                    # if it is instead an internal connected event
                     value = filtered_connected_events[event["created_at"]]
                     if len(value["issues"]) == 2:
+                        # and we only have 2 issues in the list, connect to the other issue
                         event["event_info_1"] = value["issues"][0] if value["issues"][1] == issue["number"] else value["issues"][1]
                     else:
-                        occurances = {x: value["issues"].count(x) for x in set(value["issues"])}
-                        if occurances[issue["number"]] == max(occurances.values()):
+                        # and we have more than two issues, count each issue's occurences
+                        occurences = {x: value["issues"].count(x) for x in set(value["issues"])}
+                        if occurences[issue["number"]] == max(occurences.values()):
+                            # if our issue is the most common one, that means it is the common denominator
+                            # for all connected events at this time
+                            # so this event connects to any other issue
+                            # which is then removed from a copied list to avoid duplications
                             number = next(x for x in value["multi_issues_copy"] if x != issue["number"])
                             value["multi_issues_copy"].remove(number)
                             event["event_info_1"] = number
                         else:
-                            event["event_info_1"] = max(occurances, key = occurances.get)
+                            # otherwise, connect this event to the common denominator
+                            event["event_info_1"] = max(occurences, key=occurences.get)
 
     # as the user dictionary is created, start re-formating the event information of all issues
     for issue in issue_data:
