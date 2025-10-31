@@ -80,15 +80,10 @@ def run():
     issues = load(__srcdir)
     # 2) re-format the issues
     reformat_issues(issues)
-    # create an empty dict for external connected events, meaning connected
-    # events that connect to an issue in another repository
-    external_connected_events = dict()
     # 3) merges all issue events into one list
-    # this step returns a dict containing all connected events that can be matched to the correct issues later
+    external_connected_events = dict()
     filtered_connected_events = merge_issue_events(issues, external_connected_events)
     # 4) re-format the eventsList of the issues
-    # this step also reconstructs the connections previously stored
-    # in 'external_connected_events' and 'filtered_connected_events'
     reformat_events(issues, filtered_connected_events, external_connected_events)
     # 5) update user data with Codeface database and dump username-to-name/e-mail list
     insert_user_data(issues, __conf, __resdir)
@@ -542,6 +537,8 @@ def merge_issue_events(issue_data, external_connected_events):
         issue["eventsList"] = sorted(issue["eventsList"], key=lambda k: k["created_at"])
 
     # filter out connected events which cannot be perfectly matched
+    # and populate external_connected_events dict
+    # because this happens in place, we do not need to return the external_connected_event dict later
     filtered_connected_events = dict(filter(lambda item: filter_connected_events(item[0], item[1], external_connected_events), connected_events.items()))
 
     # updates all the issues by the temporarily stored referenced_by events
@@ -550,6 +547,7 @@ def merge_issue_events(issue_data, external_connected_events):
             if issue["number"] == value["number"]:
                 issue["eventsList"] = issue["eventsList"] + value["eventsList"]
 
+    # return the filtered_connected_events dict for later reconstruction
     return filtered_connected_events
 
 
