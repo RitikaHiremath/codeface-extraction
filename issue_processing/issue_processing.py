@@ -745,7 +745,10 @@ def reformat_events(issue_data, filtered_connected_events, external_connected_ev
                 # "state_new" and "resolution" of the issue give the information about the state and the resolution of
                 # the issue when the comment was written, because the eventsList is sorted by time
                 event["event_info_1"] = issue["state_new"]
-                event["event_info_2"] = issue["resolution"]
+                if "contains_suggestion" in event:
+                    event["event_info_2"] = event["contains_suggestion"]
+                else:
+                    event["event_info_2"] = False
 
             elif event["event"] == "referenced" and event["commit"] is not None:
                 # remove "referenced" events originating from commits
