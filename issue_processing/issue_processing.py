@@ -264,13 +264,17 @@ def reformat_issues(issue_data):
         if issue["relatedCommits"] is None:
             issue["relatedCommits"] = []
 
-        # if an issue has no reviewsList, an empty Listgets created
+        # if an issue has no reviewsList, an empty List gets created
         if issue["reviewsList"] is None:
             issue["reviewsList"] = []
 
         # if an issue has no relatedIssues, an empty List gets created
         if "relatedIssues" not in issue:
             issue["relatedIssues"] = []
+
+        # if an issue has no sub-issue list, an empty List gets created
+        if "subIssues" not in issue:
+            issue["subIssues"] = []
 
         # add "closed_at" information if not present yet
         if issue["closed_at"] is None:
@@ -740,9 +744,10 @@ def reformat_events(issue_data, filtered_connected_events, external_connected_ev
                     issue["eventsList"].append(resolution_event)
 
             elif event["event"] == "commented":
-                # "state_new" and "resolution" of the issue give the information about the state and the resolution of
+                # "state_new" of the issue gives the information about the state of
                 # the issue when the comment was written, because the eventsList is sorted by time
                 event["event_info_1"] = issue["state_new"]
+                # if event is a review comment, it can contain suggestions
                 if "contains_suggestion" in event:
                     event["event_info_2"] = event["contains_suggestion"]
                 else:
