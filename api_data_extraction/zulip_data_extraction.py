@@ -104,14 +104,6 @@ def fetch_all_messages_for_stream(stream_name,topic_name):
 
     return all_messages
 
-def discussion_id_update(msgs):
-    # Sort by timestamp ascending
-    msgs = sorted(msgs, key=lambda m: m["timestamp"])
-
-    for idx, m in enumerate(msgs, start=1):
-        m["stream_id"] = f'{m["stream_id"]}#{idx}'
-
-    return msgs
 
 
 def messages_extraction_for_each_stream(streams_with_topics):
@@ -119,18 +111,16 @@ def messages_extraction_for_each_stream(streams_with_topics):
 
     for stream_name, info in streams_with_topics.items():
         topics = info["topics"]
-        # go topic wise here. fetch all messages for a topic
+
         for topic in topics:
             print(f"\n Fetching all messages for stream: {stream_name} and topic: {topic}")
              
             msgs = fetch_all_messages_for_stream(stream_name,topic)
-            
-            msgs = discussion_id_update(msgs)
 
             for m in msgs:
                 final_output.append({
                     "discussion_id": m["stream_id"],
-                    "discusssion_topic": m["subject"],
+                    "discussion_topic": m["subject"],
                     "sender_full_name": m["sender_full_name"],
                     "sender_email": m["sender_email"],
                     "stream": stream_name,
@@ -146,5 +136,5 @@ def messages_extraction_for_each_stream(streams_with_topics):
     print(f"\n Saved ALL stream messages to: {output_file}")
 
 if __name__ == "__main__":
-    streams_and_topics = load_stream_topics("zulip_streams_and_topics.json")
+    streams_and_topics = topics_extraction()
     messages_extraction_for_each_stream(streams_and_topics)

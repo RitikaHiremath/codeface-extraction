@@ -49,12 +49,10 @@ def run():
     # run processing of issue data:
     # 1) load the list of issues
     issues = load(__srcdir)
-    # 2) re-format the issues
+    # 2) update missing colums
+    issues = update(issues)
+    # 3) re-format the issues
     issues = reformat_issues(issues)
-    # 3) merges all issue events into one list
-    issues = merge_issue_events(issues)
-    # 4) re-format the eventsList of the issues
-    issues = reformat_events(issues)
     # 5) update user data with Codeface database and dump username-to-name/e-mail list
     issues = insert_user_data(issues, __conf, __resdir)
     # 6) dump result to disk
@@ -200,6 +198,74 @@ def update_user_dict(user_dict, user):
 
     return user_dict
 
+def discussion_id_update(issue_data):
+    """
+    :param issue_data: 
+    """
+    # Group timestamps by discussion_topic
+    grouped = {}
+
+    for item in issue_data:
+        topic = item["discusssion_topic"]
+        if topic not in grouped:
+            grouped[topic] = []
+        grouped[topic].append(item)
+
+    # Process each topic group
+    for topic, messages in grouped.items():
+
+        # 1. Sort messages by timestamp ASC
+        messages.sort(key=lambda m: m["timestamp"])
+
+        # 2. Add sequential discussion_id suffix (#1, #2, #3...)
+        for idx, msg in enumerate(messages, start=1):
+            msg["discussion_id"] = f'{msg["discussion_id"]}#{idx}'
+
+    return issue_data
+
+def discussion_begin_end_add(issue_data):
+    """
+    :param issue_data: the issue data where  discussion_begin and discussion_end time is to be added
+    :return: the updated data
+    """
+    # Group timestamps by discussion_topic
+    discussion_topics = {}
+
+    for item in issue_data:
+        d_topic = item["discussion_topic"]
+        ts = item["timestamp"]
+
+        if d_topic not in discussion_topics:
+            discussion_topics[d_topic] = []
+        discussion_topics[d_topic].append(ts)
+
+    # Compute begin and end for each discussion
+    discussion_bounds = {
+        d_topic: {
+            "discussion_begin": min(times),
+            "discussion_end": max(times)
+        }
+        for d_topic, times in discussion_topics.items()
+    }
+
+    # Add begin/end back to each entry
+    for item in issue_data:
+        d_topic = item["discussion_topic"]
+        item["discussion_begin"] = discussion_bounds[d_topic]["discussion_begin"]
+        item["discussion_end"] = discussion_bounds[d_topic]["discussion_end"]
+
+    return issue_data
+
+def update(issue_data):
+    """
+    updates values in the issue data structure as per requirement.
+    :params: issue_data: the issue data to be updated.x
+    :return: returns the issue data.
+    """
+    issue_data = discussion_id_update(issue_data)
+    issue_data = discussion_begin_end_add(issue_data)
+
+    return issue_data
 
 def reformat_issues(issue_data):
     """
@@ -220,6 +286,7 @@ def reformat_issues(issue_data):
         # empty container for issue resolutions
         issue["resolution"] = []
 
+        # TO DO: Are these column names needed? though they will be empty
         # if an issue has no eventsList, an empty List gets created
         if issue["eventsList"] is None:
             issue["eventsList"] = []
@@ -245,384 +312,22 @@ def reformat_issues(issue_data):
         #     issue["closed_at"] = ""
 
         # parses the creation time in the correct format
-        issue["created_at"] = format_time(issue["created_at"])
+        # issue["created_at"] = format_time(issue["created_at"])
 
         # parses the close time in the correct format
-        issue["closed_at"] = format_time(issue["closed_at"])
+        # issue["closed_at"] = format_time(issue["closed_at"])
+
+        issue["discussion_begin"] = format_time(issue["discussion_begin"])
+
+        # parses the close time in the correct format
+        issue["discussion_end"] = format_time(issue["discussion_end"])
 
         # checks if the issue is a pull-request or a normal issue and adapts the type
         issue["type"].append("issue")
 
     return issue_data
 
-# TO DO: is this needed?
-def merge_issue_events(issue_data):
-    """
-    All issue events are merged together in the eventsList. This simplifies processing in later steps.
 
-    :param issue_data: the issue data from which the events shall be merged
-    :return: the issue data with merged eventsList
-    """
-
-    log.info("Merge issue events ...")
-
-    issue_data_to_update = dict()
-
-    for issue in issue_data:
-
-        # temporary container for references
-        comments = dict()
-
-        # adds creation event to eventsList
-        created_event = dict()
-        created_event["user"] = issue["user"]
-        created_event["created_at"] = issue["created_at"]
-        created_event["event"] = "created"
-        created_event["event_info_1"] = "open"
-        created_event["event_info_2"] = []
-        issue["eventsList"].append(created_event)
-        issue["state_new"] = "open"
-
-        # adds commented event for the creation-event comment to the commentsList
-        creationComment = dict()
-        creationComment["event"] = "commented"
-        creationComment["user"] = issue["user"]
-        creationComment["referenced_at"] = issue["created_at"]
-        creationComment["ref_target"] = ""
-        creationComment["event_info_1"] = ""
-        creationComment["event_info_2"] = ""
-
-        issue["commentsList"].append(creationComment)
-
-        # the format of every related issue is adjusted to the event format
-        for rel_issue in issue["relatedIssues"]:
-            rel_issue["created_at"] = format_time(rel_issue["referenced_at"])
-            rel_issue["event"] = "add_link"
-            rel_issue["event_info_1"] = rel_issue["number"]
-            rel_issue["event_info_2"] = "issue"
-            rel_issue["ref_target"] = ""
-
-            # the related issues states that a user has add a link to another issue within the issue of interest,
-            # now we add an event for the referenced issue which states that it was referenced
-            referenced_issue_event = dict()
-            referenced_issue_event["created_at"] = format_time(rel_issue["referenced_at"])
-            referenced_issue_event["event"] = "referenced_by"
-            referenced_issue_event["user"] = rel_issue["user"]
-            referenced_issue_event["event_info_1"] = issue["number"]
-            referenced_issue_event["event_info_2"] = "issue"
-            referenced_issue_event["ref_target"] = ""
-
-            # as we cannot update the referenced issue during iterating over all issues, we need to save the
-            # referenced_by event for the referenced issue temporarily
-            if rel_issue["number"] in issue_data_to_update.keys():
-                issue_data_to_update[rel_issue["number"]]["eventsList"].append(referenced_issue_event)
-            else:
-                ref = dict()
-                ref["number"] = rel_issue["number"]
-                ref["eventsList"] = list()
-                ref["eventsList"].append(referenced_issue_event)
-                issue_data_to_update[rel_issue["number"]] = ref
-
-        # the format of every related commit is adjusted to the event format
-        for rel_commit in issue["relatedCommits"]:
-
-            rel_commit["created_at"] = format_time(rel_commit["referenced_at"])
-            rel_commit["event_info_1"] = rel_commit["commit"]["hash"]
-            rel_commit["event_info_2"] = ""
-            rel_commit["ref_target"] = ""
-
-            # if the related commit is not of type "commit" but "commitAddedToPullRequest",
-            # it is a commit which was added to the pull request
-            if rel_commit["type"] == "commitAddedToPullRequest":
-                rel_commit["event"] = "commit_added"
-
-            # if the related commit was mentioned in an issue comment:
-            elif rel_commit["type"] == "commitMentionedInIssue":
-                rel_commit["event"] = "add_link"
-                rel_commit["event_info_2"] = "commit"
-
-            # else it is a commit which references issue/pull-request
-            else:
-                rel_commit["event"] = "referenced_by"
-                rel_commit["event_info_2"] = "commit"
-
-        # the format of every comment is adjusted to the event format
-        for comment in issue["commentsList"]:
-            comment["event"] = "commented"
-            comment["ref_target"] = ""
-            comment["created_at"] = format_time(comment["referenced_at"])
-            if "event_info_1" not in comment:
-                comment["event_info_1"] = ""
-            if "event_info_2" not in comment:
-                comment["event_info_2"] = ""
-
-            # cache comment by date to resolve/re-arrange references later
-            comments[comment["created_at"]] = comment
-
-        # the format of every review and their comments is adjusted to the event format
-        for review in issue["reviewsList"]:
-            review["event"] = "reviewed"
-            review["created_at"] = format_time(review["submitted_at"])
-            review["event_info_1"] = review["state"].lower()
-            review["event_info_2"] = ""
-            review["ref_target"] = ""
-
-            if review["hasReviewInitialComment"]:
-                initialComment = dict()
-                initialComment["event"] = "commented"
-                initialComment["user"] = review["user"]
-                initialComment["ref_target"] = ""
-                initialComment["created_at"] = format_time(review["submitted_at"])
-                initialComment["event_info_1"] = ""
-                initialComment["event_info_2"] = ""
-
-                issue["commentsList"].append(initialComment)
-
-                # cache comment by date to resolve/re-arrange references later
-                comments[initialComment["created_at"]] = initialComment
-
-            for reviewComment in review["reviewComments"]:
-                reviewComment["event"] = "commented"
-                reviewComment["created_at"] = format_time(reviewComment["referenced_at"])
-                reviewComment["ref_target"] = ""
-                reviewComment["event_info_1"] = ""
-                reviewComment["event_info_2"] = ""
-
-                # cache comment by date to resolve/re-arrange references later
-                comments[reviewComment["created_at"]] = reviewComment
-
-                issue["commentsList"].append(reviewComment)
-
-        # add dismissal comments to the list of comments
-        for event in issue["eventsList"]:
-
-            if (event["event"] == "review_dismissed" and not event["dismissalMessage"] is None
-               and not event["dismissalMessage"] == ""):
-                dismissalComment = dict()
-                dismissalComment["event"] = "commented"
-                dismissalComment["user"] = event["user"]
-                dismissalComment["created_at"] = format_time(event["created_at"])
-                dismissalComment["ref_target"] = ""
-                dismissalComment["event_info_1"] = ""
-                dismissalComment["event_info_2"] = ""
-
-                # cache comment by date to resolve/re-arrange references later
-                comments[dismissalComment["created_at"]] = dismissalComment
-
-                issue["commentsList"].append(dismissalComment)
-
-        # the format of every event is adjusted
-        for event in issue["eventsList"]:
-            event["ref_target"] = ""
-            event["created_at"] = format_time(event["created_at"])
-            if "event_info_1" not in event:
-                event["event_info_1"] = ""
-            if "event_info_2" not in event:
-                event["event_info_2"] = ""
-
-            # if event collides with a comment
-            if event["created_at"] in comments:
-                comment = comments[event["created_at"]]
-                # if someone gets mentioned or subscribed by someone else in a comment,
-                # re-write the reference
-                if (event["event"] == "mentioned" or event["event"] == "subscribed") and \
-                                comment["event"] == "commented":
-                    event["ref_target"] = event["user"]
-                    event["user"] = comment["user"]
-            elif subtract_seconds_from_time(event["created_at"], 1) in comments:
-                comment = comments[subtract_seconds_from_time(event["created_at"], 1)]
-                # if someone gets mentioned or subscribed by someone else in a comment,
-                # re-write the reference
-                if (event["event"] == "mentioned" or event["event"] == "subscribed") and \
-                                comment["event"] == "commented":
-                    event["ref_target"] = event["user"]
-                    event["user"] = comment["user"]
-
-            # if event is a referenced commit, we can update the user information
-            if event["event"] == "referenced" and event["commit"] is not None:
-                if (event["user"] is None):
-                    event["user"] = dict()
-                event["user"]["name"] = event["commit"]["author"]["name"] # author or committer?
-                event["user"]["email"] = event["commit"]["author"]["email"]
-                event["user"]["username"] = event["commit"]["author"]["username"]
-
-            # if event is a review request, we can update the ref target with the requested reviewer
-            if event["event"] == "review_requested" or event["event"] == "review_request_removed":
-                event["ref_target"] = event["requestedReviewer"]
-
-            # if event dismisses a review, we can determine the original state of the corresponding review
-            if event["event"] == "review_dismissed":
-                for review in issue["reviewsList"]:
-                    if review["reviewId"] == event["reviewId"]:
-                        review["state"] = review["event_info_1"] = event["state"]
-                        review["event_info_2"] = "later_dismissed"
-
-            # if event is assign event, we have set the user to the assigner and the ref target to the assignee
-            if event["event"] == "assigned" or event["event"] == "unassigned":
-                event["ref_target"] = event["user"]
-                event["user"] = event["assigner"]
-
-        # merge events, relatedCommits, relatedIssues and comment lists
-        issue["eventsList"] = issue["commentsList"] + issue["eventsList"] + issue["relatedIssues"] + issue[
-            "relatedCommits"] + issue["reviewsList"]
-
-        # remove events without user
-        issue["eventsList"] = [event for event in issue["eventsList"] if
-                               not (event["user"] is None or event["ref_target"] is None)]
-
-        # sorts eventsList by time
-        issue["eventsList"] = sorted(issue["eventsList"], key=lambda k: k["created_at"])
-
-    # updates all the issues by the temporarily stored referenced_by events
-    for key, value in issue_data_to_update.iteritems():
-        for issue in issue_data:
-            if issue["number"] == value["number"]:
-                issue["eventsList"] = issue["eventsList"] + value["eventsList"]
-
-    return issue_data
-
-
-def reformat_events(issue_data):
-    """
-    Re-format event information dependent on the event type.
-
-    :param issue_data: the data of all issues that shall be re-formatted
-    :return: the issue data with updated event information
-    """
-
-    log.info("Update event information ...")
-
-    users = dict()
-
-    # create a dictionary of users to merge GitHub usernames and names and e-mails originating from the git repository
-    for issue in issue_data:
-
-        for event in issue["eventsList"]:
-
-            # 1) add or update users which are authors of commits
-            #    (committers of commits are usually the actor of the current event and will be dealt with in part 2 below)
-            if (event["event"] == "commit_added" or (event["event"] == "add_link" and event["event_info_2"] == "commit")
-                or (event["event"] == "referenced_by" and event["event_info_2"] == "commit")):
-                users = update_user_dict(users, event["commit"]["author"])
-
-            # 2) add or update users which are actor of the current event
-            users = update_user_dict(users, event["user"])
-
-            # 3) add or update users which are ref_target of the current event
-            if not event["ref_target"] is None and not event["ref_target"] == "":
-                users = update_user_dict(users, event["ref_target"])
-
-    # as the user dictionary is created, start re-formating the event information of all issues
-    for issue in issue_data:
-
-        events_to_remove = list()
-
-        # re-format information of every event in the eventsList of an issue
-        for event in issue["eventsList"]:
-
-            # lookup user in dictionary
-            event["user"] = lookup_user(users, event["user"])
-            if (event["ref_target"] != ""):
-                event["ref_target"] = lookup_user(users, event["ref_target"])
-
-
-            if event["event"] == "closed":
-                event["event"] = "state_updated"
-                event["event_info_1"] = "closed"  # new state
-                event["event_info_2"] = "open"  # old state
-                issue["state_new"] = "closed"
-
-            elif event["event"] == "reopened":
-                event["event"] = "state_updated"
-                event["event_info_1"] = "open"  # new state
-                event["event_info_2"] = "closed"  # old state
-                issue["state_new"] = "reopened"
-
-            elif event["event"] == "labeled":
-                label = event["label"]["name"].lower()
-                event["event_info_1"] = label
-
-                # if the label is in this list, it also is a type of the issue
-                if label in known_types:
-                    issue["type"].append(str(label))
-
-                    # creates an event for type updates and adds it to the eventsList
-                    type_event = dict()
-                    type_event["user"] = event["user"]
-                    type_event["created_at"] = event["created_at"]
-                    type_event["event"] = "type_updated"
-                    type_event["event_info_1"] = label
-                    type_event["event_info_2"] = ""
-                    type_event["ref_target"] = ""
-                    issue["eventsList"].append(type_event)
-
-                # if the label is in this list, it also is a resolution of the issue
-                elif label in known_resolutions:
-                    issue["resolution"].append(str(label))
-
-                    # creates an event for resolution updates and adds it to the eventsList
-                    resolution_event = dict()
-                    resolution_event["user"] = event["user"]
-                    resolution_event["created_at"] = event["created_at"]
-                    resolution_event["event"] = "resolution_updated"
-                    resolution_event["event_info_1"] = label
-                    resolution_event["event_info_2"] = ""
-                    resolution_event["ref_target"] = ""
-                    issue["eventsList"].append(resolution_event)
-
-            elif event["event"] == "unlabeled":
-                label = event["label"]["name"].lower()
-                event["event_info_1"] = label
-
-                # if the label is in this list, it also is a type of the issue
-                if label in known_types:
-                    if label in issue["type"]:
-                        issue["type"].remove(str(label))
-
-                    # creates an event for type updates and adds it to the eventsList
-                    type_event = dict()
-                    type_event["user"] = event["user"]
-                    type_event["created_at"] = event["created_at"]
-                    type_event["event"] = "type_updated"
-                    type_event["event_info_1"] = ""
-                    type_event["event_info_2"] = label
-                    type_event["ref_target"] = ""
-                    issue["eventsList"].append(type_event)
-
-                # if the label is in this list, it also is a resolution of the issue
-                elif label in known_resolutions:
-                    if label in issue["resolution"]:
-                        issue["resolution"].remove(str(label))
-
-                    # creates an event for resolution updates and adds it to the eventsList
-                    resolution_event = dict()
-                    resolution_event["user"] = event["user"]
-                    resolution_event["created_at"] = event["created_at"]
-                    resolution_event["event"] = "resolution_updated"
-                    resolution_event["event_info_1"] = ""
-                    resolution_event["event_info_2"] = label
-                    resolution_event["ref_target"] = ""
-                    issue["eventsList"].append(resolution_event)
-
-            elif event["event"] == "commented":
-                # "state_new" and "resolution" of the issue give the information about the state and the resolution of
-                # the issue when the comment was written, because the eventsList is sorted by time
-                event["event_info_1"] = issue["state_new"]
-                event["event_info_2"] = issue["resolution"]
-
-            elif event["event"] == "referenced" and not event["commit"] is None:
-                # remove "referenced" events originating from commits
-                # as they are handled as referenced commit
-                events_to_remove.append(event)
-
-        # sorts eventsList by time again
-        issue["eventsList"] = sorted(issue["eventsList"], key=lambda k: k["created_at"])
-
-        # remove unwanted events
-        for event_to_remove in events_to_remove:
-            issue["eventsList"].remove(event_to_remove)
-
-    return issue_data
 
 
 def insert_user_data(issues, conf, resdir):
@@ -743,7 +448,7 @@ def insert_user_data(issues, conf, resdir):
     for username in username_id_buffer:
         user = get_user_from_id(username_id_buffer[username])
         lines.append((
-            username,
+            # username,
             user["name"],
             user["email"]
         ))
