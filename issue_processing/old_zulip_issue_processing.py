@@ -1,60 +1,42 @@
-# coding=utf-8
-# This file is part of codeface-extraction, which is free software: you
-# can redistribute it and/or modify it under the terms of the GNU General
-# Public License as published by the Free Software Foundation, version 2.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License along
-# with this program; if not, write to the Free Software Foundation, Inc.,
-# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-#
-# Copyright 2017 by Raphael Nömmer <noemmer@fim.uni-passau.de>
-# Copyright 2017 by Claus Hunsen <hunsen@fim.uni-passau.de>
-# Copyright 2018 by Barbara Eckl <ecklbarb@fim.uni-passau.de>
-# Copyright 2018-2019 by Anselm Fehnker <fehnker@fim.uni-passau.de>
-# Copyright 2019 by Thomas Bock <bockthom@fim.uni-passau.de>
-# Copyright 2020-2021 by Thomas Bock <bockthom@cs.uni-saarland.de>
-# Copyright 2025 by Maximilian Löffler <s8maloef@stud.uni-saarland.de>
-# Copyright 2025 by Ritika Hiremath <rihi00002@stud.uni-saarland.de>
-# All Rights Reserved.
+# new zulip issue processing
+
 """
 This file is able to extract Zulip issue data from json files.
 """
 
 import argparse
+import httplib
 import json
 import os
 import sys
+import urllib
 from datetime import datetime, timedelta
 from logging import getLogger
+import base64
 
+import operator
 from codeface_utils.cluster.idManager import dbIdManager, csvIdManager
 from codeface_utils.configuration import Configuration
 from codeface_utils.dbmanager import DBManager
 from dateutil import parser as dateparser
+from datetime import datetime
 
 from csv_writer import csv_writer
-
-
-log = getLogger(__name__)
 
 # datetime format string
 datetime_format = "%Y-%m-%d %H:%M:%S"
 
 def run():
+    # get data from zulip api calls . then format it and apply to codeface extraction
     # get all needed paths and arguments for the method call.
-    parser = argparse.ArgumentParser(prog='codeface-extraction-issues-github', description='Codeface extraction')
+    parser = argparse.ArgumentParser(prog='codeface-extraction-issues-zulip', description='Codeface extraction')
     parser.add_argument('-c', '--config', help="Codeface configuration file", default='codeface.conf')
     parser.add_argument('-p', '--project', help="Project configuration file", required=True)
     parser.add_argument('resdir', help="Directory to store analysis results in")
 
     # parse arguments
     args = parser.parse_args(sys.argv[1:])
-    __codeface_conf, __project_conf = list(map(os.path.abspath, (args.config, args.project)))
+    __codeface_conf, __project_conf = map(os.path.abspath, (args.config, args.project))
 
     # create configuration
     __conf = Configuration.load(__codeface_conf, __project_conf)
@@ -66,7 +48,6 @@ def run():
     # run processing of issue data:
     # 1) load the list of issues
     issues = load(__srcdir)
-    # 2) re-format the issues
     # 2) update missing colums
     issues = update(issues)
     # 3) re-format the issues
@@ -77,6 +58,7 @@ def run():
     print_to_disk(issues, __resdir)
 
     log.info("Zulip issue processing complete!")
+
 
 
 def load(source_folder):
@@ -91,7 +73,7 @@ def load(source_folder):
 
     # check if file exists and exit early if not
     if not os.path.exists(srcfile):
-        log.error("Github issue file '{}' does not exist! Exiting early...".format(srcfile))
+        log.error("Zulip issue file '{}' does not exist! Exiting early...".format(srcfile))
         sys.exit(-1)
 
     with open(srcfile) as issues_file:
@@ -99,7 +81,7 @@ def load(source_folder):
 
     return issue_data
 
-
+#UPDATED    
 def format_time(time):
     """
     Format times from different sources to a consistent time format
@@ -183,10 +165,11 @@ def lookup_user(user_dict, user):
         user["email"] is None or user["email"] == ""):
 
         # lookup user only if username is not None and not empty
-        if user["username"] is not None and not user["username"] == "":
+        if not user["username"] is None and not user["username"] == "":
             user = user_dict[user["username"]]
 
     return user
+
 
 def update_user_dict(user_dict, user):
     """
@@ -201,8 +184,8 @@ def update_user_dict(user_dict, user):
     if user is None:
         user = create_deleted_user()
 
-    if user["username"] not in list(user_dict.keys()):
-        if user["username"] is not None and not user["username"] == "":
+    if not user["username"] in user_dict.keys():
+        if not user["username"] is None and not user["username"] == "":
             user_dict[user["username"]] = user
     else:
         user_in_dict = user_dict[user["username"]]
@@ -218,6 +201,7 @@ def discussion_id_update(issue_data):
     """
     :param issue_data: 
     """
+    # Group timestamps by discussion_topic
     grouped = {}
 
     for item in issue_data:
@@ -226,9 +210,13 @@ def discussion_id_update(issue_data):
             grouped[topic] = []
         grouped[topic].append(item)
 
+    # Process each topic group
     for topic, messages in grouped.items():
 
+        # 1. Sort messages by timestamp ASC
         messages.sort(key=lambda m: m["timestamp"])
+
+        # 2. Add sequential discussion_id suffix (#1, #2, #3...)
         for idx, msg in enumerate(messages, start=1):
             msg["discussion_id"] = f'{msg["discussion_id"]}#{idx}'
 
@@ -239,7 +227,7 @@ def discussion_begin_end_add(issue_data):
     :param issue_data: the issue data where  discussion_begin and discussion_end time is to be added
     :return: the updated data
     """
-    
+    # Group timestamps by discussion_topic
     discussion_topics = {}
 
     for item in issue_data:
@@ -250,6 +238,7 @@ def discussion_begin_end_add(issue_data):
             discussion_topics[d_topic] = []
         discussion_topics[d_topic].append(ts)
 
+    # Compute begin and end for each discussion
     discussion_bounds = {
         d_topic: {
             "discussion_begin": min(times),
@@ -258,6 +247,7 @@ def discussion_begin_end_add(issue_data):
         for d_topic, times in discussion_topics.items()
     }
 
+    # Add begin/end back to each entry
     for item in issue_data:
         d_topic = item["discussion_topic"]
         item["discussion_begin"] = discussion_bounds[d_topic]["discussion_begin"]
@@ -271,12 +261,13 @@ def update(issue_data):
     :params: issue_data: the issue data to be updated.x
     :return: returns the issue data.
     """
+    # updating id of issues in a particular format.
     issue_data = discussion_id_update(issue_data)
+    # adding discussion begin and end time for each issue data.
     issue_data = discussion_begin_end_add(issue_data)
 
+
     return issue_data
-
-
 
 def reformat_issues(issue_data):
     """
@@ -297,6 +288,7 @@ def reformat_issues(issue_data):
         # empty container for issue resolutions
         issue["resolution"] = []
 
+
         # if an issue has no relatedCommits, an empty List gets created
         if issue["relatedCommits"] is None:
             issue["relatedCommits"] = []
@@ -305,14 +297,28 @@ def reformat_issues(issue_data):
         if "relatedIssues" not in issue:
             issue["relatedIssues"] = []
 
+        # add "closed_at" information if not present yet
+        # if issue["closed_at"] is None:
+        #     issue["closed_at"] = ""
+
+        # parses the creation time in the correct format
+        # issue["created_at"] = format_time(issue["created_at"])
+
+        # parses the close time in the correct format
+        # issue["closed_at"] = format_time(issue["closed_at"])
+
         issue["discussion_begin"] = format_time(issue["discussion_begin"])
 
         # parses the close time in the correct format
         issue["discussion_end"] = format_time(issue["discussion_end"])
 
+        # checks if the issue is a pull-request or a normal issue and adapts the type
         issue["type"].append("issue")
 
     return issue_data
+
+
+
 
 def insert_user_data(issues, conf, resdir):
     """
@@ -333,13 +339,10 @@ def insert_user_data(issues, conf, resdir):
     user_id_buffer = dict()
     # create buffer for usernames (key: username)
     username_id_buffer = dict()
-
-    # connect to ID service
-    if conf["useCsv"]:
-        idservice = csvIdManager(conf)
-    else:
-        dbm = DBManager(conf)
-        idservice = dbIdManager(dbm, conf)
+    # open database connection
+    dbm = DBManager(conf)
+    # open ID-service connection
+    idservice = idManager(dbm, conf)
 
     def get_user_string(name, email):
         if not email or email is None:
@@ -349,24 +352,26 @@ def insert_user_data(issues, conf, resdir):
             return "{name} <{email}>".format(name=name, email=email)
 
     def get_id_and_update_user(user, buffer_db_ids=user_id_buffer, buffer_usernames=username_id_buffer):
+        username = unicode(user["username"]).encode("utf-8")
 
-        # ensure string representation for name and e-mail address
-        username = str(user["username"])
-        name = str(user["name"]) if "name" in user else username
-        mail = str(user["email"])
-
+        # fix encoding for name and e-mail address
+        if user["name"] is not None:
+            name = unicode(user["name"]).encode("utf-8")
+        else:
+            name = username
+        mail = unicode(user["email"]).encode("utf-8")
         # construct string for ID service and send query
         user_string = get_user_string(name, mail)
 
         # check buffer to reduce amount of DB queries
         if user_string in buffer_db_ids:
-            log.info("Returning person id for user '{}' from buffer.".format(user_string))
+            log.devinfo("Returning person id for user '{}' from buffer.".format(user_string))
             if username is not None:
                 buffer_usernames[username] = buffer_db_ids[user_string]
             return buffer_db_ids[user_string]
 
         # get person information from ID service
-        log.info("Passing user '{}' to ID service.".format(user_string))
+        log.devinfo("Passing user '{}' to ID service.".format(user_string))
         idx = idservice.getPersonID(user_string)
 
         # add user information to buffer
@@ -383,17 +388,16 @@ def insert_user_data(issues, conf, resdir):
 
         # check whether user information is in buffer to reduce amount of DB queries
         if idx in buffer_db:
-            log.info("Returning user '{}' from buffer.".format(idx))
+            log.devinfo("Returning user '{}' from buffer.".format(idx))
             return buffer_db[idx]
 
         # get person information from ID service
-        log.info("Passing user id '{}' to ID service.".format(idx))
+        log.devinfo("Passing user id '{}' to ID service.".format(idx))
         person = idservice.getPersonFromDB(idx)
-        user = {
-            "name": person["name"],
-            "email": person["email1"],
-            "id": person["id"]
-        }
+        user = dict()
+        user["email"] = person["email1"]  # column "email1"
+        user["name"] = person["name"]  # column "name"
+        user["id"] = person["id"]  # column "id"
 
         # add user information to buffer
         buffer_db[idx] = user
@@ -434,7 +438,7 @@ def insert_user_data(issues, conf, resdir):
     for username in username_id_buffer:
         user = get_user_from_id(username_id_buffer[username])
         lines.append((
-            username,
+            # username,
             user["name"],
             user["email"]
         ))
@@ -445,7 +449,7 @@ def insert_user_data(issues, conf, resdir):
 
     return issues
 
-# TO DO
+
 def print_to_disk(issues, results_folder):
     """
     Print issues to file "issues-github.list" in the results folder.
@@ -481,3 +485,4 @@ def print_to_disk(issues, results_folder):
 
     # write to output file
     csv_writer.write_to_csv(output_file, sorted(set(lines), key=lambda line: lines.index(line)))
+
