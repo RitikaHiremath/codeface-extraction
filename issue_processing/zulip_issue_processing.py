@@ -265,6 +265,65 @@ def discussion_begin_end_add(issue_data):
 
     return issue_data
 
+def bot_event_type(issue):
+    """
+    Docstring for bot_event_type
+    
+    :param issue: Description
+    """
+    content = issue.get("content", "").lower()
+
+    if "stream created" in content:
+        return "stream created"
+
+    if "changed the description" in content:
+        return "stream description changed"
+    
+    if "changed the access permissions" in content:
+        return "stream permissions changed"
+
+    
+    if "wave" in content:
+        return "wave"
+
+    return "unclassified event"
+
+def notification_bot_event(issue):
+    """
+    Docstring for notification_bot_event
+    
+    :param issue: Description
+    """
+    content = issue.get("content", "").lower()
+    if "has marked this topic as resolved" in content:
+        return "topic resolved"
+
+    if "has marked this topic as unresolved" in content:
+        return "topic unresolved"
+    
+    if "topic was moved" in content:
+        return "topic moved"
+    
+
+def event_type(issue_data):
+    """
+    Docstring for event_type
+    
+    :param issue_data: Description
+    """
+
+    for issue in issue_data:
+        if(("stream events" in issue["discussion_topic"])):
+            # update_user here
+            issue["individual_events"]= bot_event_type(issue)
+        else:
+            if(issue["sender_full_name"] == "Notification Bot"):
+                issue["individual_events"] = notification_bot_event(issue)
+            
+            issue["individual_events"]= "commented event"
+
+    return issue_data
+
 def update(issue_data):
     """
     updates values in the issue data structure as per requirement.
@@ -273,10 +332,9 @@ def update(issue_data):
     """
     issue_data = discussion_id_update(issue_data)
     issue_data = discussion_begin_end_add(issue_data)
+    issue_data = event_type(issue_data)
 
     return issue_data
-
-
 
 def reformat_issues(issue_data):
     """
