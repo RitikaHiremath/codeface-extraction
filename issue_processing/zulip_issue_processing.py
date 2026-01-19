@@ -73,7 +73,7 @@ def run():
     # 3) re-format the issues
     issues = reformat_issues(issues)
     # 5) update user data with Codeface database and dump username-to-name/e-mail list
-    # issues = insert_user_data(issues, __conf, __resdir)
+    issues = insert_user_data(issues, __conf, __resdir)
     # 6) dump result to disk
     print_to_disk(issues, __resdir)
 
@@ -83,16 +83,16 @@ def run():
 def load(source_folder):
     """Load issues from disk.
 
-    :param source_folder: the folder where to find 'issues.json'
-    :return: the loaded issue data
+    :param source_folder: the folder where to find 'zulip.json'
+    :return: the loaded zulip data
     """
 
-    srcfile = os.path.join(source_folder, "issues.json")
-    log.info("Loading Github issues from file '{}'...".format(srcfile))
+    srcfile = os.path.join(source_folder, "zulip.json")
+    log.info("Loading Zulip data from file '{}'...".format(srcfile))
 
     # check if file exists and exit early if not
     if not os.path.exists(srcfile):
-        log.error("Github issue file '{}' does not exist! Exiting early...".format(srcfile))
+        log.error("Zulip data file '{}' does not exist! Exiting early...".format(srcfile))
         sys.exit(-1)
 
     with open(srcfile) as issues_file:
@@ -217,18 +217,22 @@ def update_user_dict(user_dict, user):
 
 def discussion_id_update(issue_data):
     """
-    :param issue_data: 
+    Updates the id for each issue data in zulip. 
+    The ID is dependent on the topic id and followed by # and
+      the count of the message from the beginning.
+    :param issue_data: total issue data from zulip
+    : return: The updated issue data with the id updated.
     """
     grouped = {}
-
+    # groupds each discussion topic together to update the id
     for item in issue_data:
         topic = item["discusssion_topic"]
         if topic not in grouped:
             grouped[topic] = []
         grouped[topic].append(item)
 
+    # Updates the disucssion id here. 
     for topic, messages in grouped.items():
-
         messages.sort(key=lambda m: m["timestamp"])
         for idx, msg in enumerate(messages, start=1):
             msg["discussion_id"] = f'{msg["discussion_id"]}#{idx}'
@@ -237,12 +241,13 @@ def discussion_id_update(issue_data):
 
 def discussion_begin_end_add(issue_data):
     """
-    :param issue_data: the issue data where  discussion_begin and discussion_end time is to be added
-    :return: the updated data
+    Updates the discussion begin and end time for each discussion topic.
+    :param issue_data: Total issue data 
+    :return: the updated issue data with two new columns.
     """
     
     discussion_topics = {}
-
+    # groups discussion topics and finds the max and min time that topic was discussed.
     for item in issue_data:
         d_topic = item["discussion_topic"]
         ts = item["timestamp"]
@@ -268,12 +273,15 @@ def discussion_begin_end_add(issue_data):
 
 def bot_event_type(issue):
     """
-    Docstring for bot_event_type
+    Updates the type of event . 
+    This function only updates events notification bot username "Notification Bot".
     
-    :param issue: Description
+    :param issue: the zulip issue data to update 
+    :return: the event type
     """
+    # extracts the content into a variable
     content = issue.get("content", "").lower()
-
+    # checks if the event type is present in the string
     if "stream created" in content:
         return "stream created"
 
@@ -293,11 +301,15 @@ def bot_event_type(issue):
 
 def notification_bot_event(issue):
     """
-    Docstring for notification_bot_event
+    Updates the type of event . 
+    This function only updates events notification bot does with no change in username.
     
-    :param issue: Description
+    :param issue: the zulip issue data to update 
+    :return: the event type
     """
+    # extracts the content into a variable
     content = issue.get("content", "").lower()
+    # checks if the event type is present in the string
     if "has marked this topic as resolved" in content:
         return "topic resolved"
 
@@ -308,11 +320,14 @@ def notification_bot_event(issue):
         return "topic moved"
     
     return "user event"
+
 def bot_event_name_update(issue):
     """
-    Docstring for bot_event_name_update
+    For events from notification bot.
+    It finds the user in content string and returns it  
     
-    :param issue: Description
+    :param issue: a single zulip-issue data to find the user name for.
+    :return: returns the user name
     """
     soup = BeautifulSoup(issue["content"], "html.parser")
     mention = soup.find("span", class_="user-mention")
@@ -324,18 +339,22 @@ def bot_event_name_update(issue):
 
 def event_type(issue_data):
     """
-    Docstring for event_type
-    
-    :param issue_data: Description
+    Checks if the event is a stream events. 
+    updates the event type and sender details, if sender name is made into notification bot.
+    :param issue_data: total zulip issue data to check and update the event types.
+    :return: returns the updated zulip issue data
     """
 
     for issue in issue_data:
         if(("stream events" in issue["discusssion_topic"]) & (issue["sender_full_name"] == "Notification Bot")):
+            # add comments here 
             issue["individual_events"]= bot_event_type(issue)
             issue["sender_full_name"] = bot_event_name_update(issue)
             issue["sender_email"] = None
         else:
             if("stream events" in issue["discusssion_topic"]):
+                # add comments here
+                # rename this "notification_bot_event"
                 issue["individual_events"] = notification_bot_event(issue)
             
             issue["individual_events"]= "commented event"
@@ -344,10 +363,11 @@ def event_type(issue_data):
 
 def update(issue_data):
     """
-    updates values in the issue data structure as per requirement.
-    :params: issue_data: the issue data to be updated.x
+    updates values in the issue data as per requirement.
+    :params: issue_data: the issue data to be updated.
     :return: returns the issue data.
     """
+    # sends the entirity of the issue data to update discussion id, discussion begin, discussion end and event type
     issue_data = discussion_id_update(issue_data)
     issue_data = discussion_begin_end_add(issue_data)
     issue_data = event_type(issue_data)
@@ -525,14 +545,14 @@ def insert_user_data(issues, conf, resdir):
 
 def print_to_disk(issues, results_folder):
     """
-    Print issues to file "issues-github.list" in the results folder.
+    Print issues to file "issues-zulip.list" in the results folder.
 
     :param issues: the issues to dump
-    :param results_folder: the folder where to place "issues-github.list" output file
+    :param results_folder: the folder where to place "issues-zulip.list" output file
     """
 
     # construct path to output file
-    output_file = os.path.join(results_folder, "issues-github.list")
+    output_file = os.path.join(results_folder, "issues-zulip.list")
     log.info("Dumping output in file '{}'...".format(output_file))
 
     # construct lines of output
