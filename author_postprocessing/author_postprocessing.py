@@ -14,7 +14,7 @@
 #
 # Copyright 2015-2017 by Claus Hunsen <hunsen@fim.uni-passau.de>
 # Copyright 2020-2022 by Thomas Bock <bockthom@cs.uni-saarland.de>
-# Copyright 2025 by Leo Sendelbach <s8lesend@stud.uni-saarland.de>
+# Copyright 2025-2026 by Leo Sendelbach <s8lesend@stud.uni-saarland.de>
 # Copyright 2026 by Thomas Bock <bockthom@cmu.edu>
 # Copyright 2025 by Maximilian Löffler <s8maloef@stud.uni-saarland.de>
 # All Rights Reserved.
@@ -55,6 +55,15 @@ setup_logging()
 log = getLogger(__name__)
 
 ##
+# GLOBAL VARIABLES
+##
+
+# global variable containing all known copilot users and the name and mail adress copilot users will be assigned
+known_copilot_users = {"Copilot", "copilot-pull-request-reviewer[bot]", "copilot-swe-agentbot"}
+copilot_unified_name = "Copilot"
+copilot_unified_email = "copilot@example.com"
+
+##
 # RUN POSTPROCESSING
 ##
 
@@ -82,7 +91,7 @@ def perform_data_backup(results_path, results_path_backup):
                     copy(current_file, backup_file)
 
 
-def fix_github_browser_commits(data_path, issues_github_list, commits_list, authors_list, emails_list, bots_list):
+def fix_github_browser_commits(data_path, issues_github_list, commits_list, authors_list, emails_list, bots_list, unify_copilot_users=True):
     """
     Replace the author "GitHub <noreply@github.com>" in both commit and GitHub issue data by the correct author.
     The author "GitHub <noreply@github.com>" is automatically inserted as the committer of a commit that is made when
@@ -186,6 +195,11 @@ def fix_github_browser_commits(data_path, issues_github_list, commits_list, auth
             issue_data_new = []
 
             for event in issue_data:
+                # unify events to use a single copilot user for all events triggered by a known copilot user
+                if unify_copilot_users and event[9] in known_copilot_users:
+                    event[9] = copilot_unified_name
+                    event[10] = copilot_unified_email
+
                 # replace author if necessary
                 if is_github_noreply_author(event[9], event[10]) and event[8] == commit_added_event:
                     # extract commit hash from event info 1
