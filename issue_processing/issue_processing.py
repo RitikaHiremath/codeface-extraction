@@ -535,7 +535,7 @@ def merge_issue_events(issue_data, external_connected_events):
                     # if there is no connected event yet at this timestamp, create a new entry for this event
                     connected_info = dict()
                     connected_info["issues"] = [issue["number"]]
-                    connected_info["user"] = issue["user"]
+                    connected_info["user"] = event["user"]
                     connected_events[event["created_at"]] = connected_info
 
         # merge events, relatedCommits, relatedIssues and comment lists
