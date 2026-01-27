@@ -102,7 +102,7 @@ def fix_github_browser_commits(data_path, issues_github_list, commits_list, auth
     "GitHub <noreply@github.com>" are removed. Also "mentioned" or "subscribed" events in the GitHub issue data which
     reference the author "GitHub <noreply@github.com>" are removed from the GitHub issue data. In addition, remove the
     author "GitHub <noreply@github.com>" also from the author data and bot data and remove e-mails that have been sent
-    by this author.
+    by this author. This method also unifies all known copilot users into a single user if desired.
 
     :param data_path: the path to the project data that is to be fixed
     :param issues_github_list: file name of the github issue data
@@ -110,6 +110,7 @@ def fix_github_browser_commits(data_path, issues_github_list, commits_list, auth
     :param authors_list: file name of the corresponding author data
     :param emails_list: file name of the corresponding email data
     :param bots_list: file name of the corresponding bot data
+    :param unify_copilot_users: whether to unify known copilot users into a single user
     """
     github_user = "GitHub"
     github_email = "noreply@github.com"
