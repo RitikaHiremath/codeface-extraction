@@ -78,7 +78,7 @@ def run():
     # 3) re-format the issues
     issues = reformat_issues(issues)
     # 5) update user data with Codeface database and dump username-to-name/e-mail list
-    issues = insert_user_data(issues, __conf, __resdir)
+    # issues = insert_user_data(issues, __conf, __resdir)
     # 6) dump result to disk
     print_to_disk(issues, __resdir)
     log.info("Zulip issue processing complete!")
@@ -231,8 +231,12 @@ def discussion_id_update(issue_data):
     # groupds each discussion topic together to update the id
     for item in issue_data:
         topic = item["discussion_topic"]
+        if not topic:
+            log.warning("Missing discussion_topic in item:" + str(item))
+            continue
         if topic not in grouped:
             grouped[topic] = []
+            log.debug("New topic group created:" + str(topic))
         grouped[topic].append(item)
 
     # Updates the disucssion id here. 
@@ -241,6 +245,7 @@ def discussion_id_update(issue_data):
         for idx, msg in enumerate(messages, start=1):
             msg["discussion_id"] = f'{msg["discussion_id"]}#{idx}'
 
+    log.info("Finished updating discussion id for all issue data")
     return issue_data
 
 def discussion_begin_end_add(issue_data):
@@ -258,7 +263,11 @@ def discussion_begin_end_add(issue_data):
 
         if d_topic not in discussion_topics:
             discussion_topics[d_topic] = []
+            log.debug("New discussion topic found:" + str(d_topic))
         discussion_topics[d_topic].append(ts)
+
+    if not discussion_topics:
+        log.warning("No discussion topics were grouped!")
 
     discussion_bounds = {
         d_topic: {
@@ -268,11 +277,16 @@ def discussion_begin_end_add(issue_data):
         for d_topic, times in discussion_topics.items()
     }
 
+    # for d_topic, bounds in discussion_bounds.items():
+    #     log.debug("Topic" + str(d_topic) + "->" + str(bounds))
+
     for item in issue_data:
         d_topic = item["discussion_topic"]
         item["discussion_begin"] = discussion_bounds[d_topic]["discussion_begin"]
         item["discussion_end"] = discussion_bounds[d_topic]["discussion_end"]
+        log.info("Discussion bounds updated for "+ str(item))
 
+    log.info("Finished updating discussion bounds")
     return issue_data
 
 def bot_event_type(issue):
@@ -340,6 +354,7 @@ def bot_event_name_update(issue):
         return mention.get_text(strip=True)
 
     return None
+
 def create_user(issue):
     """
     Creates user for each issue data. 
@@ -348,16 +363,22 @@ def create_user(issue):
     :param issue: A single issue data from the zulip issue data
     :reutrn: returns a dictionary to update issue["user"]
     """
+    log.debug("Creating user for issue" +  str(issue["discussion_id"]))
+
     dict_issue = {}
     unclassified_name = issue["sender_full_name"]
     if " " in unclassified_name:
+        log.debug("Detected full name:" + str(unclassified_name))
         dict_issue["name"] = unclassified_name
-        dict_issue["email"] = issue["sender_email"]
         dict_issue["username"] = ""
     else:
+        log.debug("Detected username only:" + str(unclassified_name))
         dict_issue["name"] = ""
-        dict_issue["email"] = issue["sender_email"]
         dict_issue["username"] = unclassified_name
+    
+    dict_issue["email"] = issue["sender_email"]
+
+    log.info("New User dict created for" + str(issue["discussion_topic"]) + "with" + str(issue["discussion_id"]))
     return dict_issue
         
 def event_type_and_user(issue_data):
@@ -370,12 +391,14 @@ def event_type_and_user(issue_data):
 
     for issue in issue_data:
         if(("stream events" in issue["discussion_topic"]) & (issue["sender_full_name"] == "Notification Bot")):
+            log.debug("Bot stream event detected")
             # updates name and discussion 
             issue["individual_events"]= bot_event_type(issue)
             issue["sender_full_name"] = bot_event_name_update(issue)
             issue["sender_email"] = None
         else:
             if("stream events" in issue["discussion_topic"]):
+                log.debug("User stream event detected")
                 # updates the event type when issue name is proper user name.
                 issue["individual_events"] = notification_bot_event(issue)
             
@@ -383,6 +406,7 @@ def event_type_and_user(issue_data):
         # creates user for each issue data. Combines name, email and username into a dictionary.
         issue["user"] = create_user(issue)
 
+    log.info("Finished updating event types and users")
     return issue_data
 
 def update(issue_data):
@@ -396,6 +420,7 @@ def update(issue_data):
     issue_data = discussion_begin_end_add(issue_data)
     issue_data = event_type_and_user(issue_data)
 
+    log.info("Issue data updated ...")
     return issue_data
 
 def reformat_issues(issue_data):
