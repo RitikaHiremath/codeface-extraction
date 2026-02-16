@@ -36,6 +36,7 @@ from codeface_utils.cluster.idManager import dbIdManager, csvIdManager
 from codeface_utils.configuration import Configuration
 from codeface_utils.dbmanager import DBManager
 from dateutil import parser as dateparser
+from bs4 import BeautifulSoup
 
 from csv_writer import csv_writer
 
@@ -72,7 +73,7 @@ def run():
     # 3) re-format the issues
     issues = reformat_issues(issues)
     # 5) update user data with Codeface database and dump username-to-name/e-mail list
-    issues = insert_user_data(issues, __conf, __resdir)
+    # issues = insert_user_data(issues, __conf, __resdir)
     # 6) dump result to disk
     print_to_disk(issues, __resdir)
 
@@ -281,8 +282,10 @@ def bot_event_type(issue):
     
     if "changed the access permissions" in content:
         return "stream permissions changed"
-
     
+    if "renamed stream" in content:
+        return "stream renamed"
+
     if "wave" in content:
         return "wave"
 
@@ -304,6 +307,20 @@ def notification_bot_event(issue):
     if "topic was moved" in content:
         return "topic moved"
     
+    return "user event"
+def bot_event_name_update(issue):
+    """
+    Docstring for bot_event_name_update
+    
+    :param issue: Description
+    """
+    soup = BeautifulSoup(issue["content"], "html.parser")
+    mention = soup.find("span", class_="user-mention")
+
+    if mention:
+        return mention.get_text(strip=True)
+
+    return None
 
 def event_type(issue_data):
     """
@@ -313,11 +330,12 @@ def event_type(issue_data):
     """
 
     for issue in issue_data:
-        if(("stream events" in issue["discussion_topic"])):
-            # update_user here
+        if(("stream events" in issue["discusssion_topic"]) & (issue["sender_full_name"] == "Notification Bot")):
             issue["individual_events"]= bot_event_type(issue)
+            issue["sender_full_name"] = bot_event_name_update(issue)
+            issue["sender_email"] = None
         else:
-            if(issue["sender_full_name"] == "Notification Bot"):
+            if("stream events" in issue["discusssion_topic"]):
                 issue["individual_events"] = notification_bot_event(issue)
             
             issue["individual_events"]= "commented event"
@@ -367,6 +385,8 @@ def reformat_issues(issue_data):
 
         # parses the close time in the correct format
         issue["discussion_end"] = format_time(issue["discussion_end"])
+
+        issue["timestamp"] = format_time(issue["timestamp"])
 
         issue["type"].append("issue")
 
@@ -503,7 +523,6 @@ def insert_user_data(issues, conf, resdir):
 
     return issues
 
-# TO DO
 def print_to_disk(issues, results_folder):
     """
     Print issues to file "issues-github.list" in the results folder.
@@ -519,22 +538,21 @@ def print_to_disk(issues, results_folder):
     # construct lines of output
     lines = []
     for issue in issues:
-        for event in issue["eventsList"]:
-            lines.append((
-                issue["number"],
-                issue["title"],
-                json.dumps(issue["type"]),
-                issue["state_new"],
-                json.dumps(issue["resolution"]),
-                issue["created_at"],
-                issue["closed_at"],
-                json.dumps([]),  # components
-                event["event"],
-                event["user"]["name"],
-                event["user"]["email"],
-                event["created_at"],
-                event["event_info_1"],
-                json.dumps(event["event_info_2"])
+        lines.append((
+            issue["discussion_id"],
+            issue["discusssion_topic"],
+            json.dumps(issue["type"]),
+            json.dumps([]),
+            json.dumps(issue["resolution"]),
+            issue["discussion_begin"],
+            issue["discussion_end"],
+            json.dumps([]),  # components
+            issue["individual_events"],
+            issue["sender_full_name"],
+            issue["sender_email"],
+            issue["timestamp"],
+            json.dumps([]),
+            json.dumps([])
             ))
 
     # write to output file
