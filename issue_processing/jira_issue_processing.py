@@ -19,6 +19,7 @@
 # Copyright 2020-2021 by Thomas Bock <bockthom@cs.uni-saarland.de>
 # Copyright 2026 by Thomas Bock <bockthom@cmu.edu>
 # Copyright 2023, 2025 by Maximilian Löffler <s8maloef@stud.uni-saarland.de>
+# Copyright 2025-2026 by Ritika Hiremath <rihi00002@stud.uni-saarland.de>
 # All Rights Reserved.
 """
 This file is able to extract Jira issue data from xml files.
