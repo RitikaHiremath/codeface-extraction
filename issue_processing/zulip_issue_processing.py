@@ -78,7 +78,7 @@ def run():
     # 3) re-format the issues
     issues = reformat_issues(issues)
     # 5) update user data with Codeface database and dump username-to-name/e-mail list
-    # issues = insert_user_data(issues, __conf, __resdir)
+    issues = insert_user_data(issues, __conf, __resdir)
     # 6) dump result to disk
     print_to_disk(issues, __resdir)
     log.info("Zulip issue processing complete!")
