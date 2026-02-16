@@ -39,7 +39,7 @@ from codeface_utils.configuration import Configuration
 from codeface_utils.dbmanager import DBManager
 from codeface_utils.util import setup_logging
 from dateutil import parser as dateparser
-
+from codeface_utils.util import setup_logging
 from csv_writer import csv_writer
 from github_user_utils.github_user_utils import copilot_unified_name
 

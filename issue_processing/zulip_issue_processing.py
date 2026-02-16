@@ -18,6 +18,7 @@
 # Copyright 2018-2019 by Anselm Fehnker <fehnker@fim.uni-passau.de>
 # Copyright 2019 by Thomas Bock <bockthom@fim.uni-passau.de>
 # Copyright 2020-2021 by Thomas Bock <bockthom@cs.uni-saarland.de>
+# Copyright 2026 by Thomas Bock <bockthom@cmu.edu>
 # Copyright 2025 by Maximilian Löffler <s8maloef@stud.uni-saarland.de>
 # Copyright 2025-2026 by Ritika Hiremath <rihi00002@stud.uni-saarland.de>
 # All Rights Reserved.
@@ -35,12 +36,14 @@ from logging import getLogger
 from codeface_utils.cluster.idManager import dbIdManager, csvIdManager
 from codeface_utils.configuration import Configuration
 from codeface_utils.dbmanager import DBManager
+from codeface_utils.util import setup_logging
 from dateutil import parser as dateparser
 from bs4 import BeautifulSoup
 
 from csv_writer import csv_writer
 
-
+# create logger
+setup_logging()
 log = getLogger(__name__)
 
 # datetime format string
@@ -65,8 +68,10 @@ def run():
     __resdir = os.path.abspath(os.path.join(args.resdir, __conf['project'], __conf["tagging"]))
 
     # run processing of issue data:
+    print(log.name)
     # 1) load the list of issues
     issues = load(__srcdir)
+    log.info("Source file loaded")
     # 2) re-format the issues
     # 2) update missing colums
     issues = update(issues)
@@ -76,7 +81,6 @@ def run():
     # issues = insert_user_data(issues, __conf, __resdir)
     # 6) dump result to disk
     print_to_disk(issues, __resdir)
-
     log.info("Zulip issue processing complete!")
 
 
@@ -412,14 +416,6 @@ def reformat_issues(issue_data):
 
         # empty container for issue resolutions
         issue["resolution"] = []
-
-        # if an issue has no relatedCommits, an empty List gets created
-        if issue["relatedCommits"] is None:
-            issue["relatedCommits"] = []
-
-        # if an issue has no relatedIssues, an empty List gets created
-        if "relatedIssues" not in issue:
-            issue["relatedIssues"] = []
 
         issue["discussion_begin"] = format_time(issue["discussion_begin"])
 
