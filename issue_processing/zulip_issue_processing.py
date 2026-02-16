@@ -19,7 +19,7 @@
 # Copyright 2019 by Thomas Bock <bockthom@fim.uni-passau.de>
 # Copyright 2020-2021 by Thomas Bock <bockthom@cs.uni-saarland.de>
 # Copyright 2025 by Maximilian Löffler <s8maloef@stud.uni-saarland.de>
-# Copyright 2025 by Ritika Hiremath <rihi00002@stud.uni-saarland.de>
+# Copyright 2025-2026 by Ritika Hiremath <rihi00002@stud.uni-saarland.de>
 # All Rights Reserved.
 """
 This file is able to extract Zulip issue data from json files.
@@ -73,7 +73,7 @@ def run():
     # 3) re-format the issues
     issues = reformat_issues(issues)
     # 5) update user data with Codeface database and dump username-to-name/e-mail list
-    issues = insert_user_data(issues, __conf, __resdir)
+    # issues = insert_user_data(issues, __conf, __resdir)
     # 6) dump result to disk
     print_to_disk(issues, __resdir)
 
@@ -226,7 +226,7 @@ def discussion_id_update(issue_data):
     grouped = {}
     # groupds each discussion topic together to update the id
     for item in issue_data:
-        topic = item["discusssion_topic"]
+        topic = item["discussion_topic"]
         if topic not in grouped:
             grouped[topic] = []
         grouped[topic].append(item)
@@ -336,8 +336,27 @@ def bot_event_name_update(issue):
         return mention.get_text(strip=True)
 
     return None
-
-def event_type(issue_data):
+def create_user(issue):
+    """
+    Creates user for each issue data. 
+    Classifies name and username based on wthere the name has a space or not.
+    
+    :param issue: A single issue data from the zulip issue data
+    :reutrn: returns a dictionary to update issue["user"]
+    """
+    dict_issue = {}
+    unclassified_name = issue["sender_full_name"]
+    if " " in unclassified_name:
+        dict_issue["name"] = unclassified_name
+        dict_issue["email"] = issue["sender_email"]
+        dict_issue["username"] = ""
+    else:
+        dict_issue["name"] = ""
+        dict_issue["email"] = issue["sender_email"]
+        dict_issue["username"] = unclassified_name
+    return dict_issue
+        
+def event_type_and_user(issue_data):
     """
     Checks if the event is a stream events. 
     updates the event type and sender details, if sender name is made into notification bot.
@@ -346,18 +365,19 @@ def event_type(issue_data):
     """
 
     for issue in issue_data:
-        if(("stream events" in issue["discusssion_topic"]) & (issue["sender_full_name"] == "Notification Bot")):
-            # add comments here 
+        if(("stream events" in issue["discussion_topic"]) & (issue["sender_full_name"] == "Notification Bot")):
+            # updates name and discussion 
             issue["individual_events"]= bot_event_type(issue)
             issue["sender_full_name"] = bot_event_name_update(issue)
             issue["sender_email"] = None
         else:
-            if("stream events" in issue["discusssion_topic"]):
-                # add comments here
-                # rename this "notification_bot_event"
+            if("stream events" in issue["discussion_topic"]):
+                # updates the event type when issue name is proper user name.
                 issue["individual_events"] = notification_bot_event(issue)
             
             issue["individual_events"]= "commented event"
+        # creates user for each issue data. Combines name, email and username into a dictionary.
+        issue["user"] = create_user(issue)
 
     return issue_data
 
@@ -367,10 +387,10 @@ def update(issue_data):
     :params: issue_data: the issue data to be updated.
     :return: returns the issue data.
     """
-    # sends the entirity of the issue data to update discussion id, discussion begin, discussion end and event type
+    # sends the entirity of the issue data to update discussion id, discussion begin, discussion end, event type, and user.
     issue_data = discussion_id_update(issue_data)
     issue_data = discussion_begin_end_add(issue_data)
-    issue_data = event_type(issue_data)
+    issue_data = event_type_and_user(issue_data)
 
     return issue_data
 
@@ -408,7 +428,7 @@ def reformat_issues(issue_data):
 
         issue["timestamp"] = format_time(issue["timestamp"])
 
-        issue["type"].append("issue")
+        issue["type"].append("topic")
 
     return issue_data
 
@@ -560,7 +580,7 @@ def print_to_disk(issues, results_folder):
     for issue in issues:
         lines.append((
             issue["discussion_id"],
-            issue["discusssion_topic"],
+            issue["discussion_topic"],
             json.dumps(issue["type"]),
             json.dumps([]),
             json.dumps(issue["resolution"]),
@@ -568,8 +588,8 @@ def print_to_disk(issues, results_folder):
             issue["discussion_end"],
             json.dumps([]),  # components
             issue["individual_events"],
-            issue["sender_full_name"],
-            issue["sender_email"],
+            issue["user"]["name"],
+            issue["user"]["email"],
             issue["timestamp"],
             json.dumps([]),
             json.dumps([])
