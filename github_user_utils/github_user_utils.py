@@ -1,0 +1,54 @@
+# coding=utf-8
+# This file is part of codeface-extraction, which is free software: you
+# can redistribute it and/or modify it under the terms of the GNU General
+# Public License as published by the Free Software Foundation, version 2.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+#
+# Copyright 2026 by Leo Sendelbach <s8lesend@stud.uni-saarland.de>
+# All Rights Reserved.
+"""
+This file serves as a collection of global variables and utility functions, which are used throughout the 
+issue data extraction and post-processing, in particular for the processing of GitHub and Copilot user data.
+"""
+
+##
+# GLOBAL VARIABLES
+##
+
+# global variables containing all known copilot users and the name and mail adress copilot users will be assigned
+known_copilot_users = {"Copilot", "copilot-pull-request-reviewer[bot]", "copilot-swe-agentbot"}
+copilot_unified_name = "Copilot"
+copilot_unified_email = "copilot@example.com"
+
+## global variables for the GitHub author
+github_user = "GitHub"
+github_email = "noreply@github.com"
+commit_added_event = "commit_added"
+mentioned_event = "mentioned"
+subscribed_event = "subscribed"
+
+##
+# UTILITY FUNCTIONS
+##
+
+def is_github_noreply_author(name, email):
+    """
+    Helper function to check whether a (name, e-mail) pair belongs to the author "GitHub <noreply@github.com>".
+    There are two options in Codeface how this can happen:
+    (1) Username is "GitHub" and e-mail address is "noreply@github.com"
+    (2) Username is "GitHub" and e-mail address has been replaced by Codeface, resulting in "GitHub.noreply@github.com"
+
+    :param name: the name of the author to be checked
+    :param email: the email address of the author to be checked
+    :return: whether the given (name, email) pair belongs to the "GitHub <noreply@github.com>" author
+    """
+
+    return (name == github_user and (email == github_email or email == (github_user + "." + github_email)))

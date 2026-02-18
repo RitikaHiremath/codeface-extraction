@@ -53,15 +53,10 @@ from csv_writer import csv_writer
 # create logger
 setup_logging()
 log = getLogger(__name__)
+from github_user_utils import known_copilot_users, copilot_unified_name, copilot_unified_email, \
+                              is_github_noreply_author, github_user, github_email, \
+                              commit_added_event, mentioned_event, subscribed_event
 
-##
-# GLOBAL VARIABLES
-##
-
-# global variable containing all known copilot users and the name and mail adress copilot users will be assigned
-known_copilot_users = {"Copilot", "copilot-pull-request-reviewer[bot]", "copilot-swe-agentbot"}
-copilot_unified_name = "Copilot"
-copilot_unified_email = "copilot@example.com"
 
 ##
 # RUN POSTPROCESSING
@@ -112,25 +107,6 @@ def fix_github_browser_commits(data_path, issues_github_list, commits_list, auth
     :param bots_list: file name of the corresponding bot data
     :param unify_copilot_users: whether to unify known copilot users into a single user
     """
-    github_user = "GitHub"
-    github_email = "noreply@github.com"
-    commit_added_event = "commit_added"
-    mentioned_event = "mentioned"
-    subscribed_event = "subscribed"
-
-    """
-    Helper function to check whether a (name, e-mail) pair belongs to the author "GitHub <noreply@github.com>".
-    There are two options in Codeface how this can happen:
-    (1) Username is "GitHub" and e-mail address is "noreply@github.com"
-    (2) Username is "GitHub" and e-mail address has been replaced by Codeface, resulting in "GitHub.noreply@github.com"
-
-    :param name: the name of the author to be checked
-    :param email: the email address of the author to be checked
-    :return: whether the given (name, email) pair belongs to the "GitHub <noreply@github.com>" author
-    """
-    def is_github_noreply_author(name, email):
-        return (name == github_user and (email == github_email or email == (github_user + "." + github_email)))
-
 
     # Check for all files in the result directory of the project whether they need to be adjusted
     for filepath, _, filenames in walk(data_path):
@@ -139,20 +115,32 @@ def fix_github_browser_commits(data_path, issues_github_list, commits_list, auth
         if authors_list in filenames:
             f = path.join(filepath, authors_list)
             log.info("Remove author %s <%s> in %s ...", github_user, github_email, f)
+            if unify_copilot_users:
+                log.info("Also unify copilot users to %s <%s> in %s ...", copilot_unified_name, copilot_unified_email, f)
             author_data = csv_writer.read_from_csv(f)
 
             author_data_new = []
-
+            copilot_user_added = False
             for author in author_data:
                 # keep author entry only if it should not be removed
                 if not is_github_noreply_author(author[1], author[2]):
-                    author_data_new.append(author)
+                    # unify copilot author if desired
+                    if unify_copilot_users and author[1] in known_copilot_users:
+                        if not copilot_user_added:
+                            author[1] = copilot_unified_name
+                            author[2] = copilot_unified_email
+                            copilot_user_added = True
+                            author_data_new.append(author)
+                    else:
+                        author_data_new.append(author)
             csv_writer.write_to_csv(f, author_data_new)
 
         # (2) Remove e-mails from author 'GitHub <noreply@github.com>' from all emails.list files
         if emails_list in filenames:
             f = path.join(filepath, emails_list)
             log.info("Remove emails from author %s <%s> in %s ...", github_user, github_email, f)
+            if unify_copilot_users:
+                log.info("Also unify copilot users to %s <%s> in %s ...", copilot_unified_name, copilot_unified_email, f)
             email_data = csv_writer.read_from_csv(f)
 
             email_data_new = []
@@ -160,6 +148,10 @@ def fix_github_browser_commits(data_path, issues_github_list, commits_list, auth
             for email in email_data:
                 # keep author entry only if it should not be removed
                 if not is_github_noreply_author(email[0], email[1]):
+                    # unify copilot users if desired
+                    if unify_copilot_users and email[0] in known_copilot_users:
+                        email[0] = copilot_unified_name
+                        email[1] = copilot_unified_email
                     email_data_new.append(email)
                 else:
                     log.warning("Remove email %s as it was sent by %s <%s>.", email[2], email[0], email[1])
@@ -170,6 +162,8 @@ def fix_github_browser_commits(data_path, issues_github_list, commits_list, auth
         if commits_list in filenames:
             f = path.join(filepath, commits_list)
             log.info("Replace author %s <%s> in %s ...", github_user, github_email, f)
+            if unify_copilot_users:
+                log.info("Also unify copilot users to %s <%s> in %s ...", copilot_unified_name, copilot_unified_email, f)
             commit_data = csv_writer.read_from_csv(f)
 
             for commit in commit_data:
@@ -178,6 +172,10 @@ def fix_github_browser_commits(data_path, issues_github_list, commits_list, auth
                 if is_github_noreply_author(commit[5], commit[6]):
                     commit[5] = commit[2]
                     commit[6] = commit[3]
+                # unify copilot author if desired
+                if unify_copilot_users and commit[5] in known_copilot_users:
+                    commit[5] = copilot_unified_name
+                    commit[6] = copilot_unified_email
 
             csv_writer.write_to_csv(f, commit_data)
 
@@ -186,6 +184,8 @@ def fix_github_browser_commits(data_path, issues_github_list, commits_list, auth
         if issues_github_list in filenames:
             f = path.join(filepath, issues_github_list)
             log.info("Replace author %s <%s> in %s ...", github_user, github_email, f)
+            if unify_copilot_users:
+                log.info("Also unify copilot users to %s <%s> in %s ...", copilot_unified_name, copilot_unified_email, f)
             issue_data = csv_writer.read_from_csv(f)
 
             # read commit data
@@ -200,7 +200,13 @@ def fix_github_browser_commits(data_path, issues_github_list, commits_list, auth
                 if unify_copilot_users and event[9] in known_copilot_users:
                     event[9] = copilot_unified_name
                     event[10] = copilot_unified_email
-
+                    if event[8] == commit_added_event and event[13][-1:1] in known_copilot_users:
+                        # for commit added events, also unify the referenced author in event info 2 if it is a known copilot user
+                        event[13] = '"' + copilot_unified_name + '"'
+                    elif event[8] in (mentioned_event, subscribed_event) and event[12][-1:1] in known_copilot_users:
+                        # for mentioned/subscribed events, also unify the referenced user in event info 1 and 2 if it is a known copilot user
+                        event[12] = '"' + copilot_unified_name + '"'
+                        event[13] = '"' + copilot_unified_email + '"'
                 # replace author if necessary
                 if is_github_noreply_author(event[9], event[10]) and event[8] == commit_added_event:
                     # extract commit hash from event info 1
@@ -380,6 +386,9 @@ def run_postprocessing(conf, resdir, backup_data):
                     if person[4] == issue_event[12] and (quot_m + person[5] + quot_m) == issue_event[13]:
                         issue_event[12] = person[1]
                         issue_event[13] = quot_m + person[2] + quot_m
+                    # replace name in event info 2 if necessary
+                    if person[4] == issue_event[13]:
+                        issue_event[13] = person[1]
 
             csv_writer.write_to_csv(f, issue_data)
 

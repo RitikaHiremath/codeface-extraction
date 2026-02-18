@@ -40,6 +40,7 @@ from codeface_utils.dbmanager import DBManager
 from dateutil import parser as dateparser
 
 from csv_writer import csv_writer
+from github_user_utils import copilot_unified_name
 
 # create logger
 setup_logging()
@@ -57,8 +58,6 @@ known_resolutions = {"unresolved", "fixed", "wontfix", "duplicate", "invalid", "
 # datetime format string
 datetime_format = "%Y-%m-%d %H:%M:%S"
 
-# Copilot username to be assigned in specific copilot events
-copilot_username = "Copilot"
 
 def run():
     # get all needed paths and arguments for the method call.
@@ -497,7 +496,7 @@ def merge_issue_events(issue_data, external_connected_events):
             # if event is a specific copilot event, assign the copilot user data
             if event["event"] == "copilot_work_started" or event["event"] == "copilot_work_finished":
                 event["user"]["name"] = None
-                event["user"]["username"] = copilot_username
+                event["user"]["username"] = copilot_unified_name
                 event["user"]["email"] = ""
 
             # if event dismisses a review, we can determine the original state of the corresponding review
