@@ -52,3 +52,22 @@ def is_github_noreply_author(name, email):
     """
 
     return (name == github_user and (email == github_email or email == (github_user + "." + github_email)))
+
+def generate_botname_variants(botnames):
+    """
+    Helper function to generate variants of bot names, which are used in the list of
+    known bots and agents as well as during author postprocessing.
+
+    :param botnames: the list of bot names for which variants should be generated
+    :return: a set of bot name variants
+    """
+
+    botname_variants = set()
+    for botname in botnames:
+        botname_variants.add(botname)
+        if botname.endswith("[bot]"):
+            botname_variants.add(botname[:-5] + "bot")
+        elif botname.endswith("bot"):
+            botname_variants.add(botname[:-3] + "[bot]")
+
+    return botname_variants

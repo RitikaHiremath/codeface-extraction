@@ -224,6 +224,14 @@ def add_user_data(bot_data, user_data, known_bots_file, known_agents_file):
             bot_reduced["user"] = user_buffer[user[0]]
             bot_reduced["prediction"] = user[-1]
             bot_data_reduced.append(bot_reduced)
+        elif user[0] + "bot" in user_buffer.keys():
+            bot_reduced["user"] = user_buffer[user[0] + "bot"]
+            bot_reduced["prediction"] = user[-1]
+            bot_data_reduced.append(bot_reduced)
+        elif user[0] + "[bot]" in user_buffer.keys():
+            bot_reduced["user"] = user_buffer[user[0] + "[bot]"]
+            bot_reduced["prediction"] = user[-1]
+            bot_data_reduced.append(bot_reduced)
         else:
             log.warning("User '{}' in bot data does not occur in GitHub user data. Remove user...".format(user[0]))
 
