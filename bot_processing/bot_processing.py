@@ -28,6 +28,7 @@ from logging import getLogger
 
 from codeface_utils.configuration import Configuration
 from csv_writer import csv_writer
+from github_user_utils import known_copilot_users, generate_botname_variants
 
 # create logger
 setup_logging()
@@ -139,24 +140,34 @@ def check_with_known_bot_or_agent_list(known_bots_file, known_agents_file, bot_d
     for bot in known_bots:
 
         # (1) check if a known bot occurs in the GitHub issue data but has not been predicted
-        if bot[0] not in predicted_bots and bot[0] in user_data:
+        bot_variation_predicted_bots = containing_bot_variation(bot[0], predicted_bots)
+        bot_variation_user_data = containing_bot_variation(bot[0], user_data)
+        if bot_variation_predicted_bots is None and bot_variation_user_data is not None:
 
             # add the known bot as a bot to the bots list
             additional_bot = dict()
-            additional_bot["user"] = user_data[bot[0]]
+            additional_bot["user"] = user_data[bot_variation_user_data]
             additional_bot["prediction"] = "Bot"
             bot_data_reduced.append(additional_bot)
             log.info("Add known bot '{}' to bot data.".format(additional_bot["user"]))
 
         # (2) handle known bots that are already present in the bots list
-        elif bot[0] in predicted_bots and bot[0] in user_data:
+        elif bot_variation_predicted_bots is not None and bot_variation_user_data is not None:
 
             # make sure that this bot has also been predicited to be bot
             for predicted_bot in bot_data_reduced:
-                if predicted_bot["user"] == user_data[bot[0]]:
+                if predicted_bot["user"] == user_data[bot_variation_user_data]:
                     predicted_bot["prediction"] = "Bot"
-                    log.info("Mark user '{}' as bot in the bot data.".format(user_data[bot[0]]))
+                    log.info("Mark user '{}' as bot in the bot data.".format(user_data[bot_variation_user_data]))
                     break
+
+    # get list of known agents and combine it with the list of known copilot users
+    copilot_users_variants = generate_botname_variants(known_copilot_users)
+    # get list of known agent names
+    known_agents_names = [agent[0] for agent in known_agents]
+    for copilot_user in copilot_users_variants:
+        if copilot_user not in known_agents_names:
+            known_agents.append([copilot_user])
 
     for agent in known_agents:
 
@@ -220,16 +231,9 @@ def add_user_data(bot_data, user_data, known_bots_file, known_agents_file):
             continue
 
         # get user information if available
-        if user[0] in list(user_buffer.keys()):
-            bot_reduced["user"] = user_buffer[user[0]]
-            bot_reduced["prediction"] = user[-1]
-            bot_data_reduced.append(bot_reduced)
-        elif user[0] + "bot" in user_buffer.keys():
-            bot_reduced["user"] = user_buffer[user[0] + "bot"]
-            bot_reduced["prediction"] = user[-1]
-            bot_data_reduced.append(bot_reduced)
-        elif user[0] + "[bot]" in user_buffer.keys():
-            bot_reduced["user"] = user_buffer[user[0] + "[bot]"]
+        bot_variation = containing_bot_variation(user[0], user_buffer.keys())
+        if bot_variation is not None:
+            bot_reduced["user"] = user_buffer[bot_variation]
             bot_reduced["prediction"] = user[-1]
             bot_data_reduced.append(bot_reduced)
         else:
@@ -239,6 +243,27 @@ def add_user_data(bot_data, user_data, known_bots_file, known_agents_file):
     bot_data_reduced = check_with_known_bot_or_agent_list(known_bots_file, known_agents_file, bot_data, user_buffer, bot_data_reduced)
 
     return bot_data_reduced
+
+
+def containing_bot_variation(botname, name_list):
+    """
+    Helper function to return the variation of a given bot name that occurs in a list of names.
+
+    :param botname: the bot name for which the variation should be returned
+    :param name_list: the list of names to be checked for containing the bot name or a variation of it
+    :return: the variation of the given bot name that occurs in the given list of names, or None if no such variation exists
+    """
+
+    if botname in name_list:
+        return botname
+    elif botname + "bot" in name_list:
+        return botname + "bot"
+    elif botname + "[bot]" in name_list:
+        return botname + "[bot]"
+    elif botname.replace("[", "").replace("]", "") in name_list:
+        return botname.replace("[", "").replace("]", "")
+    else:
+        return None
 
 
 def print_to_disk(bot_data, results_folder):

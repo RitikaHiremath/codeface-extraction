@@ -250,6 +250,9 @@ def fix_github_browser_commits(data_path, issues_github_list, commits_list, auth
         if bots_list in filenames:
             f = path.join(filepath, bots_list)
             log.info("Remove author %s <%s> from %s ...", github_user, github_email, f)
+            if unify_copilot_users:
+                log.info("Also unify copilot users to %s <%s> in %s ...", copilot_unified_name, copilot_unified_email, f)
+            copilot_user_added = False
             bot_data = csv_writer.read_from_csv(f)
 
             bot_data_new = []
@@ -257,7 +260,15 @@ def fix_github_browser_commits(data_path, issues_github_list, commits_list, auth
             for entry in bot_data:
                 # keep bot entry only if it should not be removed
                 if not is_github_noreply_author(entry[0], entry[1]):
-                    bot_data_new.append(entry)
+                    # unify copilot users if desired
+                    if unify_copilot_users and entry[0] in known_copilot_users_extended:
+                        if not copilot_user_added:
+                            entry[0] = copilot_unified_name
+                            entry[1] = copilot_unified_email
+                            copilot_user_added = True
+                            bot_data_new.append(entry)
+                    else:
+                        bot_data_new.append(entry)
                 else:
                     log.warning("Remove entry %s <%s> from bots list.", entry[0], entry[1])
 

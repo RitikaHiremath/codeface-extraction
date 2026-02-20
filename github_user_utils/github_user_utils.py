@@ -24,7 +24,7 @@ issue data extraction and post-processing, in particular for the processing of G
 ##
 
 # global variables containing all known copilot users and the name and mail adress copilot users will be assigned
-known_copilot_users = {"Copilot", "copilot-pull-request-reviewer[bot]", "copilot-swe-agentbot"}
+known_copilot_users = {"Copilot", "copilot-pull-request-reviewer[bot]", "copilot-swe-agent[bot]"}
 copilot_unified_name = "Copilot"
 copilot_unified_email = "copilot@example.com"
 
@@ -65,9 +65,7 @@ def generate_botname_variants(botnames):
     botname_variants = set()
     for botname in botnames:
         botname_variants.add(botname)
-        if botname.endswith("[bot]"):
-            botname_variants.add(botname[:-5] + "bot")
-        elif botname.endswith("bot"):
-            botname_variants.add(botname[:-3] + "[bot]")
+        botname = botname.replace("[", "").replace("]", "")
+        botname_variants.add(botname)
 
     return botname_variants
