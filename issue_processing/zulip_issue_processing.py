@@ -66,15 +66,15 @@ def run():
     # get source and results folders
     __srcdir = os.path.abspath(os.path.join(args.resdir, __conf['repo'] + "_issues"))
     __resdir = os.path.abspath(os.path.join(args.resdir, __conf['project'], __conf["tagging"]))
-
+    __userdir = os.path.abspath(os.path.join(args.resdir, __conf['repo'] + "_usernames"))
     # run processing of issue data:
-    print(log.name)
     # 1) load the list of issues
     issues = load(__srcdir)
     log.info("Source file loaded")
+    users = load_users(__userdir)
     # 2) re-format the issues
     # 2) update missing colums
-    issues = update(issues)
+    issues = update(issues, users)
     # 3) re-format the issues
     issues = reformat_issues(issues)
     # 5) update user data with Codeface database and dump username-to-name/e-mail list
@@ -104,6 +104,48 @@ def load(source_folder):
 
     return issue_data
 
+def load_users(source_folder):
+    """Load users list from disk.
+
+    :param source_folder: the folder where to find 'usernames.list'
+    :return: the loaded zulip data
+    """
+
+    srcfile = os.path.join(source_folder, "usernames.list")
+    log.info("Loading users data from file '{}'...".format(srcfile))
+
+    # check if file exists and exit early if not
+    if not os.path.exists(srcfile):
+        log.error("Users data file '{}' does not exist! Exiting early...".format(srcfile))
+        sys.exit(-1)
+
+    users = {}
+    # cleanes and opens the source file
+    with open(srcfile, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+
+            parts = line.split(";")
+            if len(parts) != 3:
+                log.warning(f"Skipping malformed line: {line}")
+                continue
+
+            username, name, email = [p.strip('"') for p in parts]
+
+            # creates access to users data through username unless it is None
+            if username != "None":
+                users[username] = {"name": name, "email": email}
+
+            # creates access to users data through name 
+            users[name] = {
+                "username": "" if username == "None" else username,
+                "email": email,
+            }
+
+    log.info(f"Loaded {len(users)} users")
+    return users
 
 def format_time(time):
     """
@@ -284,7 +326,7 @@ def discussion_begin_end_add(issue_data):
         d_topic = item["discussion_topic"]
         item["discussion_begin"] = discussion_bounds[d_topic]["discussion_begin"]
         item["discussion_end"] = discussion_bounds[d_topic]["discussion_end"]
-        log.info("Discussion bounds updated for "+ str(item))
+        log.debug("Discussion bounds updated for "+ str(item))
 
     log.info("Finished updating discussion bounds")
     return issue_data
@@ -355,7 +397,23 @@ def bot_event_name_update(issue):
 
     return None
 
-def create_user(issue):
+# def parse_usernames(lines):
+
+#     users = {}
+
+#     for line in lines:
+#         parts = line.strip().split(";")
+#         username, name, email = [p.strip('"') for p in parts]
+
+#         if username != "None":
+#             users[username] = {"name": name, "email": email}
+
+#         users[name] = {"username": username if username != "None" else "", 
+#                        "email": email}
+
+#     return users
+
+def create_update_user(issue, users):
     """
     Creates user for each issue data. 
     Classifies name and username based on wthere the name has a space or not.
@@ -363,25 +421,34 @@ def create_user(issue):
     :param issue: A single issue data from the zulip issue data
     :reutrn: returns a dictionary to update issue["user"]
     """
-    log.debug("Creating user for issue" +  str(issue["discussion_id"]))
+    log.debug("Creating user for issue " + str(issue["discussion_id"]))
 
     dict_issue = {}
-    unclassified_name = issue["sender_full_name"]
-    if " " in unclassified_name:
-        log.debug("Detected full name:" + str(unclassified_name))
-        dict_issue["name"] = unclassified_name
-        dict_issue["username"] = ""
-    else:
-        log.debug("Detected username only:" + str(unclassified_name))
-        dict_issue["name"] = ""
-        dict_issue["username"] = unclassified_name
-    
-    dict_issue["email"] = issue["sender_email"]
+    sender = issue["sender_full_name"]
 
-    log.info("New User dict created for" + str(issue["discussion_topic"]) + "with" + str(issue["discussion_id"]))
+    # check if present in users list 
+    if sender in users:
+        info = users[sender]
+
+        dict_issue["name"] = info.get("name", sender)
+        dict_issue["username"] = info.get("username", sender)
+        dict_issue["email"] = info.get("email", issue["sender_email"])
+
+    else:
+        # fallback
+        if " " in sender:
+            dict_issue["name"] = sender
+            dict_issue["username"] = ""
+        else:
+            dict_issue["name"] = ""
+            dict_issue["username"] = sender
+
+        dict_issue["email"] = issue["sender_email"]
+
+    # log.debug("New User dict created for" + str(issue["discussion_topic"]) + "with" + str(issue["discussion_id"]))
     return dict_issue
         
-def event_type_and_user(issue_data):
+def event_type_and_user(issue_data, username):
     """
     Checks if the event is a stream events. 
     updates the event type and sender details, if sender name is made into notification bot.
@@ -391,34 +458,41 @@ def event_type_and_user(issue_data):
 
     for issue in issue_data:
         if(("stream events" in issue["discussion_topic"]) & (issue["sender_full_name"] == "Notification Bot")):
-            log.debug("Bot stream event detected")
+            # log.debug("Bot stream event detected")
             # updates name and discussion 
             issue["individual_events"]= bot_event_type(issue)
             issue["sender_full_name"] = bot_event_name_update(issue)
-            issue["sender_email"] = None
+            soup = BeautifulSoup(issue["content"], "html.parser")
+            span_data = soup.find("span", class_="user-mention") 
+            if span_data:
+                user_id = span_data.get("data-user-id")
+            issue["sender_email"] = user_id+"@zulipchat.com"
+
         else:
             if("stream events" in issue["discussion_topic"]):
-                log.debug("User stream event detected")
+                # log.debug("User stream event detected")
                 # updates the event type when issue name is proper user name.
                 issue["individual_events"] = notification_bot_event(issue)
             
             issue["individual_events"]= "commented event"
         # creates user for each issue data. Combines name, email and username into a dictionary.
-        issue["user"] = create_user(issue)
+        issue["user"] = create_update_user(issue, username)
 
     log.info("Finished updating event types and users")
     return issue_data
 
-def update(issue_data):
+def update(issue_data, users):
     """
     updates values in the issue data as per requirement.
     :params: issue_data: the issue data to be updated.
+    :params: usernames: existing list of user data
     :return: returns the issue data.
     """
+
     # sends the entirity of the issue data to update discussion id, discussion begin, discussion end, event type, and user.
     issue_data = discussion_id_update(issue_data)
     issue_data = discussion_begin_end_add(issue_data)
-    issue_data = event_type_and_user(issue_data)
+    issue_data = event_type_and_user(issue_data,users)
 
     log.info("Issue data updated ...")
     return issue_data
@@ -546,12 +620,12 @@ def insert_user_data(issues, conf, resdir):
         issue["user"] = get_id_and_update_user(issue["user"])
 
         # check database for event authors
-        for event in issue["eventsList"]:
-            event["user"] = get_id_and_update_user(event["user"])
+        # for event in issue["eventsList"]:
+        #     event["user"] = get_id_and_update_user(event["user"])
 
-            # check database for the reference-target user if needed
-            if event["ref_target"] != "":
-                event["ref_target"] = get_id_and_update_user(event["ref_target"])
+        #     # check database for the reference-target user if needed
+        #     if event["ref_target"] != "":
+        #         event["ref_target"] = get_id_and_update_user(event["ref_target"])
 
     # get all users after database updates having been performed
     for issue in issues:
@@ -559,14 +633,14 @@ def insert_user_data(issues, conf, resdir):
         issue["user"] = get_user_from_id(issue["user"])
 
         # get event authors
-        for event in issue["eventsList"]:
-            event["user"] = get_user_from_id(event["user"])
+        # for event in issue["eventsList"]:
+        #     event["user"] = get_user_from_id(event["user"])
 
-            # get the reference-target user if needed
-            if event["ref_target"] != "":
-                event["ref_target"] = get_user_from_id(event["ref_target"])
-                event["event_info_1"] = event["ref_target"]["name"]
-                event["event_info_2"] = event["ref_target"]["email"]
+        #     # get the reference-target user if needed
+        #     if event["ref_target"] != "":
+        #         event["ref_target"] = get_user_from_id(event["ref_target"])
+        #         event["event_info_1"] = event["ref_target"]["name"]
+        #         event["event_info_2"] = event["ref_target"]["email"]
 
     # dump username, name, and e-mail to file
     lines = []
