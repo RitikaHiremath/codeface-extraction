@@ -440,7 +440,7 @@ def create_update_user(issue, users):
             dict_issue["name"] = sender
             dict_issue["username"] = ""
         else:
-            dict_issue["name"] = ""
+            dict_issue["name"] = sender
             dict_issue["username"] = sender
 
         dict_issue["email"] = issue["sender_email"]
