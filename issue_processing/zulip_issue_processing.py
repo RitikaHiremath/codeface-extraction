@@ -66,7 +66,7 @@ def run():
     # get source and results folders
     __srcdir = os.path.abspath(os.path.join(args.resdir, __conf['repo'] + "_issues"))
     __resdir = os.path.abspath(os.path.join(args.resdir, __conf['project'], __conf["tagging"]))
-    __userdir = os.path.abspath(os.path.join(args.resdir, __conf['repo'] + "_usernames"))
+    __userdir = os.path.abspath(os.path.join(args.resdir, __conf['project'], __conf["tagging"]))
     # run processing of issue data:
     # 1) load the list of issues
     issues = load(__srcdir)
@@ -105,7 +105,7 @@ def load(source_folder):
     return issue_data
 
 def load_users(source_folder):
-    """Load users list from disk.
+    """Load users list from disk if it exists.
 
     :param source_folder: the folder where to find 'usernames.list'
     :return: the loaded zulip data
@@ -116,9 +116,9 @@ def load_users(source_folder):
 
     # check if file exists and exit early if not
     if not os.path.exists(srcfile):
-        log.error("Users data file '{}' does not exist! Exiting early...".format(srcfile))
-        sys.exit(-1)
-
+        log.error("Users data file '{}' does not exist! Continuing without...".format(srcfile))
+        return {}
+    
     users = {}
     # cleanes and opens the source file
     with open(srcfile, encoding="utf-8") as f:
