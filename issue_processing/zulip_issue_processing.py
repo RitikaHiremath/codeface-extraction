@@ -397,22 +397,6 @@ def bot_event_name_update(issue):
 
     return None
 
-# def parse_usernames(lines):
-
-#     users = {}
-
-#     for line in lines:
-#         parts = line.strip().split(";")
-#         username, name, email = [p.strip('"') for p in parts]
-
-#         if username != "None":
-#             users[username] = {"name": name, "email": email}
-
-#         users[name] = {"username": username if username != "None" else "", 
-#                        "email": email}
-
-#     return users
-
 def create_update_user(issue, users):
     """
     Creates user for each issue data. 
@@ -619,28 +603,10 @@ def insert_user_data(issues, conf, resdir):
         # check database for issue author
         issue["user"] = get_id_and_update_user(issue["user"])
 
-        # check database for event authors
-        # for event in issue["eventsList"]:
-        #     event["user"] = get_id_and_update_user(event["user"])
-
-        #     # check database for the reference-target user if needed
-        #     if event["ref_target"] != "":
-        #         event["ref_target"] = get_id_and_update_user(event["ref_target"])
-
     # get all users after database updates having been performed
     for issue in issues:
         # get issue author
         issue["user"] = get_user_from_id(issue["user"])
-
-        # get event authors
-        # for event in issue["eventsList"]:
-        #     event["user"] = get_user_from_id(event["user"])
-
-        #     # get the reference-target user if needed
-        #     if event["ref_target"] != "":
-        #         event["ref_target"] = get_user_from_id(event["ref_target"])
-        #         event["event_info_1"] = event["ref_target"]["name"]
-        #         event["event_info_2"] = event["ref_target"]["email"]
 
     # dump username, name, and e-mail to file
     lines = []
