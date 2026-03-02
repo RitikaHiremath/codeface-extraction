@@ -194,8 +194,8 @@ def create_user(name, username, email):
         email = ""
 
     user = dict()
-    user["name"] = name
     user["username"] = username
+    user["name"] = name
     user["email"] = email
 
     return user
@@ -414,18 +414,21 @@ def create_update_user(issue, users):
     if sender in users:
         info = users[sender]
 
-        dict_issue["name"] = info.get("name", sender)
         dict_issue["username"] = info.get("username", sender)
+        dict_issue["name"] = info.get("name", sender)
         dict_issue["email"] = info.get("email", issue["sender_email"])
 
     else:
         # fallback
+        # checks if there is a space in the string sender. 
         if " " in sender:
-            dict_issue["name"] = sender
             dict_issue["username"] = ""
-        else:
             dict_issue["name"] = sender
+            
+        # if it does not find a name then updates both with sa
+        else:
             dict_issue["username"] = sender
+            dict_issue["name"] = sender
 
         dict_issue["email"] = issue["sender_email"]
 
@@ -639,6 +642,7 @@ def print_to_disk(issues, results_folder):
     # construct lines of output
     lines = []
     for issue in issues:
+        print(issue["user"])
         lines.append((
             issue["discussion_id"],
             issue["discussion_topic"],
