@@ -88,7 +88,7 @@ def encode_as_utf8(string):
 
     # remove unicode characters from "Specials" block
     # see: https://www.compart.com/en/unicode/block/U+FFF0
-    new_string = re.sub(r"\ufff.", " ", new_string)
+    new_string = re.sub(r"[\ufff0-\uffff]", " ", new_string)
 
     # remove all kinds of control characters and emojis
     # see: https://www.fileformat.info/info/unicode/category/index.htm
@@ -107,5 +107,5 @@ def encode_as_utf8(string):
     four_byte_replacement = r" "  # r":4bytereplacement:"
     new_string = four_byte_regex.sub(four_byte_replacement, new_string.decode("utf-8")).encode("utf-8")
 
-    return str(new_string)
+    return new_string.decode("utf-8")
 
