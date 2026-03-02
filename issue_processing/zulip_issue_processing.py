@@ -642,7 +642,7 @@ def print_to_disk(issues, results_folder):
     # construct lines of output
     lines = []
     for issue in issues:
-        print(issue["user"])
+        # print(issue["user"])
         lines.append((
             issue["discussion_id"],
             issue["discussion_topic"],
