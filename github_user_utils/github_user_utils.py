@@ -34,6 +34,13 @@ github_email = "noreply@github.com"
 commit_added_event = "commit_added"
 mentioned_event = "mentioned"
 subscribed_event = "subscribed"
+assigned_event = "assigned"
+unassigned_event = "unassigned"
+review_requested_event = "review_requested"
+review_request_removed_event = "review_request_removed"
+
+# When looking at elements originating from json lists, we need to consider quotation marks around the string
+quot_m = "\""
 
 ##
 # UTILITY FUNCTIONS

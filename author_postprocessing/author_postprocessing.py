@@ -50,12 +50,15 @@ from logging import getLogger
 from codeface_utils.configuration import Configuration
 from csv_writer import csv_writer
 
+from github_user_utils.github_user_utils import known_copilot_users, copilot_unified_name, copilot_unified_email, \
+                              is_github_noreply_author, github_user, github_email, \
+                              commit_added_event, mentioned_event, subscribed_event, \
+                              assigned_event, unassigned_event, review_requested_event, \
+                              review_request_removed_event, generate_botname_variants, quot_m
+
 # create logger
 setup_logging()
 log = getLogger(__name__)
-from github_user_utils import known_copilot_users, copilot_unified_name, copilot_unified_email, \
-                              is_github_noreply_author, github_user, github_email, \
-                              commit_added_event, mentioned_event, subscribed_event, generate_botname_variants
 
 known_copilot_users_extended = generate_botname_variants(known_copilot_users)
 ##
@@ -176,6 +179,9 @@ def fix_github_browser_commits(data_path, issues_github_list, commits_list, auth
                 if unify_copilot_users and commit[5] in known_copilot_users_extended:
                     commit[5] = copilot_unified_name
                     commit[6] = copilot_unified_email
+                if unify_copilot_users and commit[2] in known_copilot_users_extended:
+                    commit[2] = copilot_unified_name
+                    commit[3] = copilot_unified_email
 
             csv_writer.write_to_csv(f, commit_data)
 
@@ -194,19 +200,20 @@ def fix_github_browser_commits(data_path, issues_github_list, commits_list, auth
             commit_hash_to_author = {commit[7]: commit[2:4] for commit in commit_data}
             author_name_to_data = {author[1]: author[1:3] for author in author_data_new}
             issue_data_new = []
-
             for event in issue_data:
                 # unify events to use a single copilot user for all events triggered by a known copilot user
                 if unify_copilot_users and event[9] in known_copilot_users_extended:
                     event[9] = copilot_unified_name
                     event[10] = copilot_unified_email
-                    if event[8] == commit_added_event and event[13][-1:1] in known_copilot_users_extended:
-                        # for commit added events, also unify the referenced author in event info 2 if it is a known copilot user
-                        event[13] = '"' + copilot_unified_name + '"'
-                    elif event[8] in (mentioned_event, subscribed_event) and event[12][-1:1] in known_copilot_users_extended:
-                        # for mentioned/subscribed events, also unify the referenced user in event info 1 and 2 if it is a known copilot user
-                        event[12] = '"' + copilot_unified_name + '"'
-                        event[13] = '"' + copilot_unified_email + '"'
+                if unify_copilot_users and event[8] == commit_added_event and event[13][1:-1] in known_copilot_users_extended:
+                    # for commit added events, also unify the referenced author in event info 2 if it is a known copilot user
+                    event[13] = quot_m + copilot_unified_name + quot_m
+                elif unify_copilot_users and event[8] in (mentioned_event, subscribed_event, assigned_event, unassigned_event,
+                                                          review_requested_event, review_request_removed_event) \
+                                         and event[12] in known_copilot_users_extended:
+                    # for mentioned/subscribed events, also unify the referenced user in event info 1 and 2 if it is a known copilot user
+                    event[12] = copilot_unified_name
+                    event[13] = quot_m + copilot_unified_email + quot_m
                 # replace author if necessary
                 if is_github_noreply_author(event[9], event[10]) and event[8] == commit_added_event:
                     # extract commit hash from event info 1
@@ -305,9 +312,6 @@ def run_postprocessing(conf, resdir, backup_data):
     bugs_jira_list = "bugs-jira.list"
     bots_list = "bots.list"
 
-    # When looking at elements originating from json lists, we need to consider quotation marks around the string
-    quot_m = "\""
-
     data_path = path.join(resdir, conf["project"], conf["tagging"])
 
     # Correctly replace author 'GitHub <noreply@github.com>' in the commit data and in "commit_added" events of the
@@ -398,8 +402,8 @@ def run_postprocessing(conf, resdir, backup_data):
                         issue_event[12] = person[1]
                         issue_event[13] = quot_m + person[2] + quot_m
                     # replace name in event info 2 if necessary
-                    if person[4] == issue_event[13]:
-                        issue_event[13] = person[1]
+                    if quot_m + person[4] + quot_m == issue_event[13]:
+                        issue_event[13] = quot_m + person[1] + quot_m
 
             csv_writer.write_to_csv(f, issue_data)
 
@@ -466,8 +470,12 @@ def run_postprocessing(conf, resdir, backup_data):
                     # the bot is already in the list, check if there are different predictions
                     stored_bot = bot_names_and_emails[(bot[0], bot[1])]
                     if stored_bot[2] != bot[2]:
+                        # if either of the predictions is agent, keep agent
+                        if (stored_bot[2] == "Agent" or bot[2] == "Agent"):
+                            stored_bot[2] = "Agent"
+                            bot_names_and_emails[(bot[0], bot[1])] = stored_bot
                         # if either of the predictions is bot, keep bot
-                        if (stored_bot[2] == "Bot" or bot[2] == "Bot"):
+                        elif (stored_bot[2] == "Bot" or bot[2] == "Bot"):
                             stored_bot[2] = "Bot"
                             bot_names_and_emails[(bot[0], bot[1])] = stored_bot
                         # otherwise, if either of the predictions is human, keep human

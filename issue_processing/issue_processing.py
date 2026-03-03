@@ -40,7 +40,7 @@ from codeface_utils.dbmanager import DBManager
 from dateutil import parser as dateparser
 
 from csv_writer import csv_writer
-from github_user_utils import copilot_unified_name
+from github_user_utils.github_user_utils import copilot_unified_name
 
 # create logger
 setup_logging()
@@ -757,9 +757,9 @@ def reformat_events(issue_data, filtered_connected_events, external_connected_ev
                 event["event_info_1"] = issue["state_new"]
                 # if event is a review comment, it can contain suggestions
                 if "contains_suggestion" in event:
-                    event["event_info_2"] = event["contains_suggestion"]
+                    event["event_info_2"] = str(event["contains_suggestion"])
                 else:
-                    event["event_info_2"] = False
+                    event["event_info_2"] = str(False)
 
             elif event["event"] == "referenced" and event["commit"] is not None:
                 # remove "referenced" events originating from commits
@@ -939,7 +939,7 @@ def print_to_disk(issues, results_folder):
                 json.dumps(issue["resolution"]),
                 issue["created_at"],
                 issue["closed_at"],
-                json.dumps([issue["subIssues"]]),  # components
+                json.dumps(issue["subIssues"]),  # components
                 event["event"],
                 event["user"]["name"],
                 event["user"]["email"],
