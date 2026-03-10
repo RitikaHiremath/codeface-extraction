@@ -237,7 +237,6 @@ def reformat_issues(issue_data):
     Re-arrange issue data structure.
 
     :param issue_data: the issue data to re-arrange
-    :return: the re-arranged issue data
     """
 
     log.info("Re-arranging Github issues...")
@@ -302,7 +301,8 @@ def merge_issue_events(issue_data, external_connected_events):
     All issue events are merged together in the eventsList. This simplifies processing in later steps.
 
     :param issue_data: the issue data from which the events shall be merged
-    :return: the issue data with merged eventsList
+    :param external_connected_events: a dict to store connected events to external issues
+    :return: a filtered dict of connected events for future reconstruction
     """
 
     log.info("Merge issue events ...")
@@ -576,17 +576,17 @@ def filter_connected_events(key, value, external_connected_events):
     # if 2 connected events exist, matching them is trivial
     if num_issues == 2:
         return True
-    occurences = {x: value["issues"].count(x) for x in set(value["issues"])}
+    occurrences = {x: value["issues"].count(x) for x in set(value["issues"])}
     # otherwise, if it is an even number, check if it can be easily matched,
     # meaning that exactly half the events occur in the same issue
-    if num_issues % 2 == 0 and num_issues/2 in occurences.values():
+    if num_issues % 2 == 0 and num_issues/2 in occurrences.values():
         # duplicate issue list for matching the issues later
         value["multi_issues_copy"] = list(value["issues"])
         return True
     # if it is an odd number, check if it can be easily matched
     # meaning that exactly half (rounded up) the events occur in the same issue
-    if num_issues % 2 == 1 and (num_issues + 1)/2 in occurences.values():
-        for sub_key, sub_value in occurences.iteritems():
+    if num_issues % 2 == 1 and (num_issues + 1)/2 in occurrences.values():
+        for sub_key, sub_value in occurrences.iteritems():
             # then, assign one of them as an external connected event and proceed as in previous case
             if sub_value == (num_issues + 1)/2:
                 new_entry = dict()
@@ -606,7 +606,8 @@ def reformat_events(issue_data, filtered_connected_events, external_connected_ev
     Re-format event information dependent on the event type.
 
     :param issue_data: the data of all issues that shall be re-formatted
-    :return: the issue data with updated event information
+    :param filtered_connected_events: the dict of connected events which can be reconstructed
+    :param external_connected_events: the dict of connected events to external issues
     """
 
     log.info("Update event information ...")
@@ -646,9 +647,9 @@ def reformat_events(issue_data, filtered_connected_events, external_connected_ev
                         # and we only have 2 issues in the list, connect to the other issue
                         event["event_info_1"] = value["issues"][0] if value["issues"][1] == issue["number"] else value["issues"][1]
                     else:
-                        # and we have more than two issues, count each issue's occurences
-                        occurences = {x: value["issues"].count(x) for x in set(value["issues"])}
-                        if occurences[issue["number"]] == max(occurences.values()):
+                        # and we have more than two issues, count each issue's occurrences
+                        occurrences = {x: value["issues"].count(x) for x in set(value["issues"])}
+                        if occurrences[issue["number"]] == max(occurrences.values()):
                             # if our issue is the most common one, that means it is the common denominator
                             # for all connected events at this time
                             # so this event connects to any other issue
@@ -658,7 +659,7 @@ def reformat_events(issue_data, filtered_connected_events, external_connected_ev
                             event["event_info_1"] = number
                         else:
                             # otherwise, connect this event to the common denominator
-                            event["event_info_1"] = max(occurences, key=occurences.get)
+                            event["event_info_1"] = max(occurrences, key=occurrences.get)
 
     # as the user dictionary is created, start re-formating the event information of all issues
     for issue in issue_data:
@@ -788,7 +789,6 @@ def insert_user_data(issues, conf, resdir):
     :param issues: the issues to retrieve user data from
     :param conf: the project configuration
     :param resdir: the directory in which the username-to-user-list should be dumped
-    :return: the updated issue data
     """
 
     log.info("Syncing users with ID service...")
