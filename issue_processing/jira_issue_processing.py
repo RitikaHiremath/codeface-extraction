@@ -467,21 +467,18 @@ def load_issues_via_api(issues, persons, url, referenced_bys):
             for change in changelog.histories:
 
                 # default values for state and resolution
-                old_state, new_state, old_resolution, new_resolution = "open", "open", "unresolved", "unresolved"
+                new_state, old_resolution, new_resolution = "open", "unresolved", "unresolved"
 
                 # all changes in the issue changelog are checked if they contain a useful information
                 for item in change.items:
 
                     # state_updated event gets created and added to the issue history
                     if item.field == "status":
-                        if item.fromString is not None:
-                            old_state = item.fromString.lower()
                         if item.toString is not None:
                             new_state = item.toString.lower()
                         history = dict()
                         history["event"] = "state_updated"
                         history["event_info_1"] = new_state
-                        history["event_info_2"] = old_state
                         if hasattr(change, "author"):
                             user = create_user(change.author.displayName, change.author.name, "")
                         else:
