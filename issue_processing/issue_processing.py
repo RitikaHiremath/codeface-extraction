@@ -537,6 +537,10 @@ def merge_issue_events(issue_data, external_connected_events):
                     connected_info["user"] = event["user"]
                     connected_events[event["created_at"]] = connected_info
 
+            # if event is a locked event, save the lock reason in event_info_1
+            if event["event"] == "locked":
+                event["event_info_1"] = event["lock_reason"]
+
         # merge events, relatedCommits, relatedIssues and comment lists
         issue["eventsList"] = issue["commentsList"] + issue["eventsList"] + issue["relatedIssues"] + issue[
             "relatedCommits"] + issue["reviewsList"]
