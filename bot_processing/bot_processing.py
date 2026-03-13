@@ -84,7 +84,7 @@ def load_bot_data(bot_file, header = True):
 
     # check if file exists and exit early if not
     if not os.path.exists(bot_file):
-        log.error("Bot file '{}' does not exist! Exiting early...".format(bot_file))
+        log.error("Bot/Agent file '{}' does not exist (can be empty)! Exiting early...".format(bot_file))
         sys.exit(-1)
 
     bot_data = csv_writer.read_from_csv(bot_file, delimiter=',')
