@@ -72,8 +72,7 @@ def run():
     issues = load(__srcdir)
     log.info("Source file loaded")
     users = load_users(__userdir)
-    # 2) re-format the issues
-    # 2) update missing colums
+    # 2) update missing columns
     issues = update(issues, users)
     # 3) re-format the issues
     issues = reformat_issues(issues)
@@ -120,7 +119,7 @@ def load_users(source_folder):
         return {}
     
     users = {}
-    # cleanes and opens the source file
+    # cleans and opens the source file
     with open(srcfile, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -270,7 +269,7 @@ def discussion_id_update(issue_data):
     : return: The updated issue data with the id updated.
     """
     grouped = {}
-    # groupds each discussion topic together to update the id
+    # groups each discussion topic together to update the id
     for item in issue_data:
         topic = item["discussion_topic"]
         if not topic:
@@ -281,7 +280,7 @@ def discussion_id_update(issue_data):
             log.debug("New topic group created:" + str(topic))
         grouped[topic].append(item)
 
-    # Updates the disucssion id here. 
+    # Updates the discussion id here. 
     for topic, messages in grouped.items():
         messages.sort(key=lambda m: m["timestamp"])
         for idx, msg in enumerate(messages, start=1):
@@ -400,7 +399,7 @@ def bot_event_name_update(issue):
 def create_update_user(issue, users):
     """
     Creates user for each issue data. 
-    Classifies name and username based on wthere the name has a space or not.
+    Classifies name and username based on whethre the name has a space or not.
     
     :param issue: A single issue data from the zulip issue data
     :reutrn: returns a dictionary to update issue["user"]
@@ -444,7 +443,7 @@ def event_type_and_user(issue_data, username):
     """
 
     for issue in issue_data:
-        if(("stream events" in issue["discussion_topic"]) & (issue["sender_full_name"] == "Notification Bot")):
+        if(("stream events" in issue["discussion_topic"]) and (issue["sender_full_name"] == "Notification Bot")):
             # log.debug("Bot stream event detected")
             # updates name and discussion 
             issue["individual_events"]= bot_event_type(issue)
@@ -476,7 +475,7 @@ def update(issue_data, users):
     :return: returns the issue data.
     """
 
-    # sends the entirity of the issue data to update discussion id, discussion begin, discussion end, event type, and user.
+    # sends the entirety of the issue data to update discussion id, discussion begin, discussion end, event type, and user.
     issue_data = discussion_id_update(issue_data)
     issue_data = discussion_begin_end_add(issue_data)
     issue_data = event_type_and_user(issue_data,users)
