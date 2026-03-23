@@ -20,7 +20,16 @@ This file is able to extract issue data from Zulip.
 import zulip
 import json
 import time
+from codeface_utils.util import setup_logging
+from logging import getLogger
 
+
+# create logger
+setup_logging()
+log = getLogger(__name__)
+
+# Log in to https://rust-lang.zulipchat.com and in the API Key present in personal settings, download zuliprc.txt
+# Template of zuliprc.txt is present in this directory.
 ZULIP_CONFIG_FILE = "zuliprc.txt"
 client = zulip.Client(config_file=ZULIP_CONFIG_FILE)
 
@@ -39,10 +48,10 @@ def safe_get_topics(stream_id):
             return [t["name"] for t in resp["topics"]]
         elif resp["result"] == "error" and resp.get("code") == "RATE_LIMIT_HIT":
             retry = int(resp.get("retry_after", 5))
-            print(f"Rate limit hit, retrying in {retry}s...")
+            log.info("Rate limit hit, retrying in '{}'s...".format(retry))
             time.sleep(retry)
         else:
-            print("Error fetching topics:", resp)
+            log.error("Error fetching topics: '{}'", resp)
             return []
 
 
@@ -57,7 +66,7 @@ def topics_extraction():
 
     for i, s in enumerate(streams, 1):
         stream_name = s["name"]
-        print(f"[{i}/{len(streams)}] Getting topics for: {stream_name}")
+        log.debug(f"[{i}/{len(streams)}] Getting topics for: {stream_name}")
 
         topics = safe_get_topics(s["stream_id"])
         data[stream_name] = {
@@ -69,7 +78,7 @@ def topics_extraction():
     with open("zulip_streams_and_topics.json", "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-    print("Saved zulip_streams_and_topics.json")
+    log.info("Saved zulip_streams_and_topics.json")
     return data
 
      
@@ -131,7 +140,7 @@ def messages_extraction_for_each_stream(streams_with_topics):
         topics = info["topics"]
 
         for topic in topics:
-            print(f"\n Fetching all messages for stream: {stream_name} and topic: {topic}")
+            log.debug(f"\n Fetching all messages for stream: {stream_name} and topic: {topic}")
              
             msgs = fetch_all_messages_for_stream(stream_name,topic)
 
@@ -151,7 +160,7 @@ def messages_extraction_for_each_stream(streams_with_topics):
     with open(output_file, "w") as f:
         json.dump(final_output, f, indent=2)
 
-    print(f"\n Saved ALL stream messages to: {output_file}")
+    log.info("\n Saved all stream messages to: '{}'".format(output_file))
 
 if __name__ == "__main__":
     streams_and_topics = topics_extraction()
