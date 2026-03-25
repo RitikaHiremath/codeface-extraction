@@ -29,8 +29,9 @@ setup_logging()
 log = getLogger(__name__)
 
 # Log in to https://rust-lang.zulipchat.com and in the API Key present in personal settings, download zuliprc.txt
-# Template of zuliprc.txt is present in this directory.
-ZULIP_CONFIG_FILE = "zuliprc.txt"
+# Template of zuliprc.txt is present in this directory. 
+# Update the location of zuliprc.txt file in the bellow string
+ZULIP_CONFIG_FILE = "/Users/ritikahiremath/Downloads/zuliprc.txt"
 client = zulip.Client(config_file=ZULIP_CONFIG_FILE)
 
 
@@ -162,6 +163,7 @@ def messages_extraction_for_each_stream(streams_with_topics):
 
     log.info("\n Saved all stream messages to: '{}'".format(output_file))
 
-if __name__ == "__main__":
+def run():
+    log.info("Starting Zulip data extraction")
     streams_and_topics = topics_extraction()
     messages_extraction_for_each_stream(streams_and_topics)
