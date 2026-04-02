@@ -31,7 +31,7 @@ from logging import getLogger
 setup_logging()
 log = getLogger(__name__)
 
-# Log in to https://rust-lang.zulipchat.com, go to Personal Settings → API key, and download the .zuliprc file.
+# Log in to https://rust-lang.zulipchat.com, go to Personal Settings -> Account&Privacy -> API key, and download the .zuliprc file or copy the API key and utilize the template.
 # Template of zuliprc.txt is present in this directory. 
 
 # The location of zuliprc.txt file 
