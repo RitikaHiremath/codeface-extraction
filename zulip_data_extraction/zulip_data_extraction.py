@@ -19,7 +19,10 @@ This file is able to extract issue data from Zulip.
 """
 import zulip
 import json
+import argparse
 import time
+import os
+import sys
 from codeface_utils.util import setup_logging
 from logging import getLogger
 
@@ -28,11 +31,25 @@ from logging import getLogger
 setup_logging()
 log = getLogger(__name__)
 
-# Log in to https://rust-lang.zulipchat.com and in the API Key present in personal settings, download zuliprc.txt
+# Log in to https://rust-lang.zulipchat.com, go to Personal Settings → API key, and download the .zuliprc file.
 # Template of zuliprc.txt is present in this directory. 
-# Update the location of zuliprc.txt file in the bellow string
-ZULIP_CONFIG_FILE = "/Users/ritikahiremath/Downloads/zuliprc.txt"
-client = zulip.Client(config_file=ZULIP_CONFIG_FILE)
+
+# The location of zuliprc.txt file 
+parser = argparse.ArgumentParser()
+parser.add_argument("--zulip-config", default=None, help="Path to zuliprc config file")
+args = parser.parse_args(sys.argv[1:])
+
+# Resolve path
+if args.zulip_config:
+    config_path = args.zulip_config
+else:
+    config_path = os.path.join(os.path.dirname(__file__), "zuliprc")
+
+# Raise error if file not found
+if not os.path.exists(config_path):
+    raise FileNotFoundError(f"Zulip config file not found at: {config_path}")
+
+client = zulip.Client(config_file= config_path)
 
 
 def safe_get_topics(stream_id):
