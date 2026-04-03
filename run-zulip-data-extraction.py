@@ -14,7 +14,7 @@
 #
 # Copyright 2025-2026 by Ritika Hiremath <rihi00002@stud.uni-saarland.de>
 # All Rights Reserved.
-from zulip_data_extraction import zulip_data_extraction as scrapping
+from zulip_data_extraction import zulip_data_extraction as scraping
 
-scrapping.run()
+scraping.run()
 
