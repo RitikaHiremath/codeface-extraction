@@ -34,7 +34,7 @@ def run():
     parser = argparse.ArgumentParser(description="Merge issues-github.list files")
     parser.add_argument( "--resdir", required=True, help="Path to data/results/threemonth/" )
     parser.add_argument( "--projects", nargs="+", required=True, help="One or more project folder names, e.g. vue_proximity keras_proximity" )
-    parser.add_argument( "--output", default="merged_issues.list", help="Output CSV file path (default: merged_issues.list)" )
+    parser.add_argument( "--output", required= True, help="Custom output directory name" )
     args = parser.parse_args()
 
     # extract issues
@@ -42,7 +42,7 @@ def run():
     # merge and update the issue content
     merged = merge_issues(all_issues)
     # save merged issues
-    save_merged(merged, args.output)
+    save_merged(merged, args.resdir, args.projects, args.output)
     log.info("Issues successfully merged!")
 
 def extract_issues(project_list, threemonth_dir):
@@ -52,12 +52,12 @@ def extract_issues(project_list, threemonth_dir):
     all_issues = {}
     for project in project_list:
         # Matches the actual path for data: threemonth/<project>/proximity/issues-github.list
-        issues_file = Path(threemonth_dir) / project / "proximity" / "issues-github.list"
-        if not issues_file.exists():
+        issues_file = os.path.join(threemonth_dir, project, "proximity", "issues-github.list")
+        if not os.path.exists(issues_file):
             log.warning(f"File not found: {issues_file}")
             continue
 
-        with issues_file.open(newline="", encoding="utf-8") as f:
+        with open(issues_file, newline="", encoding="utf-8") as f:
             reader = csv.reader(f, delimiter=";")
             rows = [row for row in reader]
         all_issues[project] = rows
@@ -88,11 +88,16 @@ def merge_issues(all_issues):
     log.info(f"Total merged rows: {len(merged)}")
     return merged
 
-def save_merged(merged_rows, output_path):
+def save_merged(merged_rows, resdir, project_list, custom_dir):
     """
-    Saves the file with the updated contents
+    Saves the merged file to a new directory alongside the input directory.
     """
+    # Same directory as input directory with custom name - given by user
+    output_dir = os.path.join(os.path.abspath(resdir), custom_dir, "proximity")
+    os.makedirs(output_dir, exist_ok=True)
+
+    output_path = os.path.join(output_dir, "issues-github.list")
     with open(output_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f, delimiter=";", quoting=csv.QUOTE_ALL)
         writer.writerows(merged_rows)
-        log.info(f"Saved to {output_path}")
+    log.info(f"Saved to {output_path}")
