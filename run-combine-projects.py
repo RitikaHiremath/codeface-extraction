@@ -14,6 +14,6 @@
 #
 # Copyright 2026 by Ritika Hiremath <rihi00002@stud.uni-saarland.de>
 # All Rights Reserved.
-from combine_issues import combine_issues
+from combine_projects import combine_projects
 
-combine_issues.run()
+combine_projects.run()
