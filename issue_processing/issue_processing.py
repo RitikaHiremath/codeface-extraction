@@ -512,7 +512,7 @@ def merge_issue_events(issue_data, external_connected_events):
                 event["user"] = event["assigner"]
 
             # if event is merged event, save the hash of the merge commit in event_info_1
-            if event["event"] == "merged":
+            if event["event"] == "merged" and not event["commit"] is None:
                 event["event_info_1"] = event["commit"]["hash"]
 
             # if event is connected event, create or add to a matching dict entry by matching timestamps, for later reconstruction
