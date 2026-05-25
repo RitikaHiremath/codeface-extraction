@@ -37,13 +37,19 @@ log = getLogger(__name__)
 # The location of zuliprc.txt file 
 parser = argparse.ArgumentParser()
 parser.add_argument("--zulip-config", default=None, help="Path to zuliprc config file")
-args = parser.parse_args(sys.argv[1:])
+parser.add_argument("--output", default=None, help="Path to the output directory") 
+args = parser.parse_args(sys.argv[1:]) 
 
-# Resolve path
-if args.zulip_config:
-    config_path = args.zulip_config
-else:
-    config_path = os.path.join(os.path.dirname(__file__), "zuliprc")
+# Resolve path 
+if args.zulip_config: 
+    config_path = args.zulip_config 
+else: 
+    config_path = os.path.join(os.path.dirname(__file__), "zuliprc") 
+
+if args.output: 
+    output_path = os.path.join(args.output, "issues-zulip.json") 
+else: 
+    output_path = os.path.join(os.path.dirname(__file__), "issues-zulip.json")
 
 # Raise error if file not found
 if not os.path.exists(config_path):
@@ -51,6 +57,15 @@ if not os.path.exists(config_path):
 
 client = zulip.Client(config_file= config_path)
 
+
+def run():
+    log.info("Starting Zulip data extraction")
+    # use exisiting zulip_streams_and_topics.josn file 
+    if os.path.exists(os.path.join(os.path.dirname(output_path), "zulip_streams_and_topics.json")):
+        streams_and_topics= os.path.join(os.path.dirname(output_path), "zulip_streams_and_topics.json")
+    else:
+        streams_and_topics = topics_extraction()
+    messages_extraction_for_each_stream(streams_and_topics,output_path)
 
 def safe_get_topics(stream_id):
     """
@@ -93,7 +108,8 @@ def topics_extraction():
 
         time.sleep(0.5)
 
-    with open("zulip_streams_and_topics.json", "w", encoding="utf-8") as f:
+    topics_file = os.path.join(os.path.dirname(output_path), "zulip_streams_and_topics.json")
+    with open(topics_file, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
     log.info("Saved zulip_streams_and_topics.json")
@@ -174,13 +190,7 @@ def messages_extraction_for_each_stream(streams_with_topics):
             })
 
     # Save everything
-    output_file = "issues.json"
-    with open(output_file, "w") as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         json.dump(final_output, f, indent=2)
 
-    log.info("\n Saved all stream messages to: '{}'".format(output_file))
-
-def run():
-    log.info("Starting Zulip data extraction")
-    streams_and_topics = topics_extraction()
-    messages_extraction_for_each_stream(streams_and_topics)
+    log.info("\n Saved all stream messages to: '{}'".format(output_path))
