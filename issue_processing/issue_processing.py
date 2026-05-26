@@ -270,11 +270,11 @@ def reformat_issues(issue_data):
             issue["reviewsList"] = []
 
         # if an issue has no relatedIssues, an empty List gets created
-        if "relatedIssues" not in issue:
+        if issue["relatedIssues"] is None:
             issue["relatedIssues"] = []
 
         # if an issue has no sub-issue list, an empty List gets created
-        if "subIssues" not in issue:
+        if issue["subIssues"] is None:
             issue["subIssues"] = []
 
         # add "closed_at" information if not present yet
