@@ -47,9 +47,9 @@ else:
     config_path = os.path.join(os.path.dirname(__file__), "zuliprc") 
 
 if args.output: 
-    output_path = os.path.join(args.output, "issues-zulip.json") 
+    output_path = os.path.join(args.output, "zulip.json") 
 else: 
-    output_path = os.path.join(os.path.dirname(__file__), "issues-zulip.json")
+    output_path = os.path.join(os.path.dirname(__file__), "zulip.json")
 
 # Raise error if file not found
 if not os.path.exists(config_path):
@@ -60,12 +60,15 @@ client = zulip.Client(config_file= config_path)
 
 def run():
     log.info("Starting Zulip data extraction")
-    # use exisiting zulip_streams_and_topics.josn file 
+    # use exisiting zulip_streams_and_topics.json file 
     if os.path.exists(os.path.join(os.path.dirname(output_path), "zulip_streams_and_topics.json")):
-        streams_and_topics= os.path.join(os.path.dirname(output_path), "zulip_streams_and_topics.json")
+        streams_and_topics_path = os.path.join(os.path.dirname(output_path), "zulip_streams_and_topics.json")
+        with open(streams_and_topics_path, "r", encoding="utf-8") as f:
+            streams_and_topics = json.load(f)
+
     else:
         streams_and_topics = topics_extraction()
-    messages_extraction_for_each_stream(streams_and_topics,output_path)
+    messages_extraction_for_each_stream(streams_and_topics)
 
 def safe_get_topics(stream_id):
     """
@@ -76,7 +79,7 @@ def safe_get_topics(stream_id):
 
     """
     while True:
-        resp = client.get_stream_topics(stream_id=stream_id)
+        resp = client.get_stream_topics(stream_id = stream_id)
         if resp["result"] == "success":
             return [t["name"] for t in resp["topics"]]
         elif resp["result"] == "error" and resp.get("code") == "RATE_LIMIT_HIT":
@@ -109,7 +112,7 @@ def topics_extraction():
         time.sleep(0.5)
 
     topics_file = os.path.join(os.path.dirname(output_path), "zulip_streams_and_topics.json")
-    with open(topics_file, "w", encoding="utf-8") as f:
+    with open(topics_file, "w", encoding = "utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
     log.info("Saved zulip_streams_and_topics.json")
@@ -123,7 +126,7 @@ def load_stream_topics(file_path):
     :params: file_path : path of the file for streams and topics.
     :return: returns the content of the file.
     """
-    with open(file_path, "r", encoding="utf-8") as f:
+    with open(file_path, "r", encoding = "utf-8") as f:
         return json.load(f)
     
 
@@ -190,7 +193,7 @@ def messages_extraction_for_each_stream(streams_with_topics):
             })
 
     # Save everything
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(final_output, f, indent=2)
+    with open(output_path, "w", encoding = "utf-8") as f:
+        json.dump(final_output, f, indent = 2)
 
     log.info("\n Saved all stream messages to: '{}'".format(output_path))
