@@ -13,22 +13,24 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 #
 # Copyright 2021-2022 by Thomas Bock <bockthom@cs.uni-saarland.de>
+# Copyright 2026 by Thomas Bock <bockthom@cmu.edu>
+# Copyright 2025 by Maximilian Löffler <s8maloef@stud.uni-saarland.de>
 # All Rights Reserved.
 """
 This file is able to extract information on bot/human users from csv files.
 """
 
 import argparse
-import httplib
 import os
 import sys
-import urllib
+from logging import getLogger
 
-import operator
-from codeface.cli import log
-from codeface.configuration import Configuration
-
+from codeface_utils.configuration import Configuration
 from csv_writer import csv_writer
+
+# create logger
+setup_logging()
+log = getLogger(__name__)
 
 def run():
     # get all needed paths and arguments for the method call.
@@ -39,7 +41,7 @@ def run():
 
     # parse arguments
     args = parser.parse_args(sys.argv[1:])
-    __codeface_conf, __project_conf = map(os.path.abspath, (args.config, args.project))
+    __codeface_conf, __project_conf = list(map(os.path.abspath, (args.config, args.project)))
 
     # create configuration
     __conf = Configuration.load(__codeface_conf, __project_conf)
@@ -75,7 +77,7 @@ def load_bot_data(bot_file, header = True):
     :return: the read bot data
     """
 
-    log.devinfo("Read bot data from file '{}'...".format(bot_file))
+    log.info("Read bot data from file '{}'...".format(bot_file))
 
     # check if file exists and exit early if not
     if not os.path.exists(bot_file):
@@ -99,7 +101,7 @@ def load_user_data(user_data_file):
     :return: the read user data
     """
 
-    log.devinfo("Read user data from file '{}'...".format(user_data_file))
+    log.info("Read user data from file '{}'...".format(user_data_file))
 
     # check if file exists and exit early if not
     if not os.path.exists(user_data_file):
@@ -192,12 +194,12 @@ def add_user_data(bot_data, user_data, known_bots_file):
             continue
 
         # get user information if available
-        if user[0] in user_buffer.keys():
+        if user[0] in list(user_buffer.keys()):
             bot_reduced["user"] = user_buffer[user[0]]
             bot_reduced["prediction"] = user[-1]
             bot_data_reduced.append(bot_reduced)
         else:
-            log.warn("User '{}' in bot data does not occur in GitHub user data. Remove user...".format(user[0]))
+            log.warning("User '{}' in bot data does not occur in GitHub user data. Remove user...".format(user[0]))
 
     # check whether known GitHub bots occur in the GitHub issue data and, if so, update the bot data accordingly
     bot_data_reduced = check_with_known_bot_list(known_bots_file, bot_data, user_buffer, bot_data_reduced)
@@ -224,7 +226,7 @@ def print_to_disk(bot_data, results_folder):
                  user["user"]["email"],
                  user["prediction"]
                 )
-        if not entry in lines:
+        if entry not in lines:
             lines.append(entry)
 
     # write to output file

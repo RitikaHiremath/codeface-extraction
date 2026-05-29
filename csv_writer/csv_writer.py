@@ -15,25 +15,13 @@
 # Copyright 2017 by Claus Hunsen <hunsen@fim.uni-passau.de>
 # Copyright 2018 by Anselm Fehnker <fehnker@fim.uni-passau.de>
 # Copyright 2020-2021 by Thomas Bock <bockthom@cs.uni-saarland.de>
+# Copyright 2025 by Maximilian Löffler <s8maloef@stud.uni-saarland.de>
 # All Rights Reserved.
 """
 This file provides the needed functions for standardized CSV writing
 """
 
 import csv
-
-
-def __encode(line):
-    """Encode the given line (a tuple of columns) properly in UTF-8."""
-
-    lineres = ()  # re-encode column if it is unicode
-    for column in line:
-        if type(column) is unicode:
-            lineres += (column.encode("utf-8"),)
-        else:
-            lineres += (column,)
-
-    return lineres
 
 
 def write_to_csv(file_path, lines, append=False):
@@ -45,14 +33,13 @@ def write_to_csv(file_path, lines, append=False):
     :param append: Flag if lines shall be appended to file or overwrite file
     """
 
-    open_mode = "a+b" if append else "wb"
+    open_mode = "a" if append else "w"
 
-    with open(file_path, open_mode) as csv_file:
+    with open(file_path, mode=open_mode, encoding="utf-8") as csv_file:
         wr = csv.writer(csv_file, delimiter=';', lineterminator='\n', quoting=csv.QUOTE_NONNUMERIC)
         # encode in proper UTF-8 before writing to file
         for line in lines:
-            line_encoded = __encode(line)
-            wr.writerow(line_encoded)
+            wr.writerow(line)
 
 def read_from_csv(file_path, delimiter=";"):
     """

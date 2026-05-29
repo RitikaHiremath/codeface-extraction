@@ -17,7 +17,8 @@
 # Copyright 2018 by Barbara Eckl <ecklbarb@fim.uni-passau.de>
 # Copyright 2018-2019 by Anselm Fehnker <fehnker@fim.uni-passau.de>
 # Copyright 2020-2021 by Thomas Bock <bockthom@cs.uni-saarland.de>
-# Copyright 2023 by Maximilian Löffler <s8maloef@stud.uni-saarland.de>
+# Copyright 2026 by Thomas Bock <bockthom@cmu.edu>
+# Copyright 2023, 2025 by Maximilian Löffler <s8maloef@stud.uni-saarland.de>
 # All Rights Reserved.
 """
 This file is able to extract Jira issue data from xml files.
@@ -26,27 +27,29 @@ This file is able to extract Jira issue data from xml files.
 import argparse
 import os
 import sys
-import time
 import csv
 import json
+from logging import getLogger
 
 from xml.dom.minidom import parse
-from datetime import datetime
 from dateutil import parser as dateparser
 
-from codeface.cli import log
-from codeface.cluster.idManager import idManager
-from codeface.configuration import Configuration
-from codeface.dbmanager import DBManager
+from codeface_utils.cluster.idManager import dbIdManager, csvIdManager
+from codeface_utils.configuration import Configuration
+from codeface_utils.dbmanager import DBManager
 
 from csv_writer import csv_writer
 
 from jira import JIRA
 from jira.exceptions import JIRAError
 from time import sleep
+import importlib
 
-reload(sys)
-sys.setdefaultencoding("utf-8")
+importlib.reload(sys)
+
+# create logger
+setup_logging()
+log = getLogger(__name__)
 
 # global counter for JIRA requests to make sure to not exceed the request limit
 jira_request_counter = 0
@@ -65,7 +68,7 @@ def run():
 
     # parse arguments
     args = parser.parse_args(sys.argv[1:])
-    __codeface_conf, __project_conf = map(os.path.abspath, (args.config, args.project))
+    __codeface_conf, __project_conf = list(map(os.path.abspath, (args.config, args.project)))
 
     # create configuration
     __conf = Configuration.load(__codeface_conf, __project_conf)
@@ -114,9 +117,9 @@ def run():
         processed_issues.extend(issues)
 
     # 4) insert referenced_by events into issue histories
-    for issue_id in referenced_bys.keys():
+    for issue_id in list(referenced_bys.keys()):
         # obtain list of issues which have the current issue id
-        referenced_issue = list(filter(lambda issue: issue["externalId"] == issue_id, processed_issues))
+        referenced_issue = list([issue for issue in processed_issues if issue["externalId"] == issue_id])
         if len(referenced_issue) > 0:
             if len(referenced_issue) > 1:
                 log.warning("Ambiguous issue id " + issue_id + " found in the issue list.")
@@ -172,7 +175,7 @@ def load_xml(source_folder, xml_file):
     """
 
     srcfile = os.path.join(source_folder, xml_file)
-    log.devinfo("Loading issues from file '{}'...".format(srcfile))
+    log.info("Loading issues from file '{}'...".format(srcfile))
 
     try:
         # parse the xml-file
@@ -235,21 +238,21 @@ def merge_user_with_user_from_csv(user, persons):
     """
 
     new_user = dict()
-    name_utf8 = unicode(user["name"]).encode("utf-8")
-    username_utf8 = unicode(user["username"].lower()).encode("utf-8")
+    name_utf8 = str(user["name"]).encode("utf-8")
+    username_utf8 = str(user["username"].lower()).encode("utf-8")
 
-    if username_utf8 in persons["by_username"].keys():
+    if username_utf8 in list(persons["by_username"].keys()):
         new_user["username"] = username_utf8
-        new_user["name"] = unicode(persons["by_username"].get(username_utf8)[0]).encode("utf-8")
-        new_user["email"] = unicode(persons["by_username"].get(username_utf8)[1]).encode("utf-8")
-    elif name_utf8 in persons["by_name"].keys():
+        new_user["name"] = str(persons["by_username"].get(username_utf8)[0]).encode("utf-8")
+        new_user["email"] = str(persons["by_username"].get(username_utf8)[1]).encode("utf-8")
+    elif name_utf8 in list(persons["by_name"].keys()):
         new_user["username"] = username_utf8
-        new_user["name"] = unicode(persons["by_name"].get(name_utf8)[0]).encode("utf-8")
-        new_user["email"] = unicode(persons["by_name"].get(name_utf8)[1]).encode("utf-8")
+        new_user["name"] = str(persons["by_name"].get(name_utf8)[0]).encode("utf-8")
+        new_user["email"] = str(persons["by_name"].get(name_utf8)[1]).encode("utf-8")
     else:
         new_user["username"] = username_utf8
         new_user["name"] = name_utf8
-        new_user["email"] = unicode(user["email"]).encode("utf-8")
+        new_user["email"] = str(user["email"]).encode("utf-8")
         log.warning("User not in csv-file: " + str(user))
 
     log.info("current User: " + str(user) + ",    new user: " + str(new_user))
@@ -290,7 +293,7 @@ def parse_xml(issue_data, persons, skip_history, referenced_bys):
 
         resolved = issue_x.getElementsByTagName("resolved")
         issue["resolveDate"] = ""
-        if (len(resolved) > 0) and (not resolved[0] is None):
+        if (len(resolved) > 0) and (resolved[0] is not None):
             resolveDate = resolved[0].firstChild.data
             issue["resolveDate"] = format_time(resolveDate)
 
@@ -372,7 +375,7 @@ def parse_xml(issue_data, persons, skip_history, referenced_bys):
 
             text = comment_x.firstChild
             if text is None:
-                log.warn("Empty comment in issue " + issue["id"])
+                log.warning("Empty comment in issue " + issue["id"])
                 comment["text"] = ""
             else:
                 comment["text"] = text.data
@@ -440,7 +443,7 @@ def load_issues_via_api(issues, persons, url, referenced_bys):
             api_issue = jira_project.issue(issue["externalId"], expand="changelog")
             changelog = api_issue.changelog
         except JIRAError:
-            log.warn("JIRA Error: Changelog cannot be extracted for issue " + issue["externalId"] + ". History omitted!")
+            log.warning("JIRA Error: Changelog cannot be extracted for issue " + issue["externalId"] + ". History omitted!")
             changelog = None
 
         histories = list()
@@ -478,7 +481,7 @@ def load_issues_via_api(issues, persons, url, referenced_bys):
                         if hasattr(change, "author"):
                             user = create_user(change.author.displayName, change.author.name, "")
                         else:
-                            log.warn("No author for history: " + str(change.id) + " created at " + str(change.created))
+                            log.warning("No author for history: " + str(change.id) + " created at " + str(change.created))
                             user = create_user("","","")
                         history["author"] = merge_user_with_user_from_csv(user, persons)
                         history["date"] = format_time(change.created)
@@ -498,7 +501,7 @@ def load_issues_via_api(issues, persons, url, referenced_bys):
                         if hasattr(change, "author"):
                             user = create_user(change.author.displayName, change.author.name, "")
                         else:
-                            log.warn("No author for history: " + str(change.id) + " created at " + str(change.created))
+                            log.warning("No author for history: " + str(change.id) + " created at " + str(change.created))
                             user = create_user("","","")
                         history["author"] = merge_user_with_user_from_csv(user, persons)
                         history["date"] = format_time(change.created)
@@ -590,10 +593,13 @@ def insert_user_data(issues, conf):
     user_buffer = dict()
     # create buffer for user ids (key: user string)
     user_id_buffer = dict()
-    # open database connection
-    dbm = DBManager(conf)
-    # open ID-service connection
-    idservice = idManager(dbm, conf)
+
+    # connect to ID service
+    if conf["useCsv"]:
+        idservice = csvIdManager(conf)
+    else:
+        dbm = DBManager(conf)
+        idservice = dbIdManager(dbm, conf)
 
     def get_user_string(name, email):
         if not email or email is None:
@@ -603,22 +609,21 @@ def insert_user_data(issues, conf):
             return "{name} <{email}>".format(name=name, email=email)
 
     def get_id_and_update_user(user, buffer_db_ids=user_id_buffer):
-        # fix encoding for name and e-mail address
-        if user["name"] is not None and user["name"] != "":
-            name = unicode(user["name"]).encode("utf-8")
-        else:
-            name = unicode(user["username"]).encode("utf-8")
-        mail = unicode(user["email"]).encode("utf-8")  # empty
+
+        # ensure string representation for name and e-mail address
+        name = str(user["name"]) if "name" in user else str(user["username"])
+        mail = str(user["email"]) # may be empty
+
         # construct string for ID service and send query
         user_string = get_user_string(name, mail)
 
         # check buffer to reduce amount of DB queries
         if user_string in buffer_db_ids:
-            log.devinfo("Returning person id for user '{}' from buffer.".format(user_string))
+            log.info("Returning person id for user '{}' from buffer.".format(user_string))
             return buffer_db_ids[user_string]
 
         # get person information from ID service
-        log.devinfo("Passing user '{}' to ID service.".format(user_string))
+        log.info("Passing user '{}' to ID service.".format(user_string))
         idx = idservice.getPersonID(user_string)
 
         # add user information to buffer
@@ -631,16 +636,17 @@ def insert_user_data(issues, conf):
 
         # check whether user information is in buffer to reduce amount of DB queries
         if idx in buffer_db:
-            log.devinfo("Returning user '{}' from buffer.".format(idx))
+            log.info("Returning user '{}' from buffer.".format(idx))
             return buffer_db[idx]
 
         # get person information from ID service
-        log.devinfo("Passing user id '{}' to ID service.".format(idx))
+        log.info("Passing user id '{}' to ID service.".format(idx))
         person = idservice.getPersonFromDB(idx)
-        user = dict()
-        user["email"] = person["email1"]  # column "email1"
-        user["name"] = person["name"]  # column "name"
-        user["id"] = person["id"]  # column "id"
+        user = {
+            "name": person["name"],
+            "email": person["email1"],
+            "id": person["id"]
+        }
 
         # add user information to buffer
         buffer_db[idx] = user
@@ -1000,8 +1006,8 @@ def load_csv(source_folder):
         :return: the first existing file name, None otherwise
         """
 
-        filenames = map(lambda fi: os.path.join(source_folder, fi), filenames)
-        existing = map(lambda fi: os.path.exists(fi), filenames)
+        filenames = [os.path.join(source_folder, fi) for fi in filenames]
+        existing = [os.path.exists(fi) for fi in filenames]
         first = next((i for (i, x) in enumerate(existing) if x), None)
 
         if first is not None:
@@ -1020,17 +1026,17 @@ def load_csv(source_folder):
         log.error("Person files '{}' do not exist! Exiting early...".format(person_files))
         sys.exit(-1)
 
-    log.devinfo("Loading person csv from file '{}'...".format(srcfile))
+    log.info("Loading person csv from file '{}'...".format(srcfile))
     with open(srcfile, "r") as f:
         person_data = csv.DictReader(f, delimiter=",", skipinitialspace=True)
         persons_by_username = {}
         persons_by_name = {}
         for row in person_data:
-            if not row["AuthorID"] in persons_by_username.keys():
-                author_id_utf8 = unicode(row["AuthorID"]).encode("utf-8")
+            if row["AuthorID"] not in list(persons_by_username.keys()):
+                author_id_utf8 = str(row["AuthorID"]).encode("utf-8")
                 persons_by_username[author_id_utf8] = (row["AuthorName"], row["userEmail"])
-            if not row["AuthorName"] in persons_by_name.keys():
-                author_name_utf8 = unicode(row["AuthorName"]).encode("utf-8")
+            if row["AuthorName"] not in list(persons_by_name.keys()):
+                author_name_utf8 = str(row["AuthorName"]).encode("utf-8")
                 persons_by_name[author_name_utf8] = (row["AuthorName"], row["userEmail"])
 
         persons = dict()

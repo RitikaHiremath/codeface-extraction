@@ -17,6 +17,7 @@
 # Copyright 2019, 2021 by Thomas Bock <bockthom@cs.uni-saarland.de>
 # Copyright 2018 by Barbara Eckl <ecklbarb@fim.uni-passau.de>
 # Copyright 2018 by Tina Schuh <schuht@fim.uni-passau.de>
+# Copyright 2025 by Maximilian Löffler <s8maloef@stud.uni-saarland.de>
 # All Rights Reserved.
 """
 This file provides the class 'Extraction' and all of its subclasses.
@@ -26,17 +27,18 @@ import itertools
 import os
 import unicodedata
 import re
+from logging import getLogger
 from ftfy import fix_encoding
 from email.header import decode_header, make_header
 
-from codeface.cli import log
-from codeface.util import gen_range_path
+from codeface_utils.util import gen_range_path
 
+
+log = getLogger(__name__)
 
 #
 # GET EXTRACTIONS
 #
-
 
 def get_extractions(dbm, conf, resdir, csv_writer, extract_commit_messages, extract_impl, extract_on_range_level):
     # all extractions are subclasses of Extraction:
@@ -117,7 +119,7 @@ class Extraction(object):
     def is_project_level(self):
         """Check if this extraction is on project level (i.e., {revision} is not on the SQL statement)."""
 
-        return not ("{revision}" in self.sql)
+        return "{revision}" not in self.sql
 
     def is_generic_extraction(self):
         """Check if this extraction is generic (i.e., it can be used for several artifacts and, hence,
@@ -441,7 +443,7 @@ class RevisionExtraction(Extraction):
     def get_list(self):
         result = self._run_sql(None, None)
         lines = self._reduce_result(result)
-        return [rev for (rev, date) in lines]
+        return [rev for (rev, _) in lines]
 
 
 #
@@ -723,7 +725,7 @@ class FunctionImplementationRangeExtraction(Extraction):
 
 def fix_characters_in_string(text):
     """
-    Removes control characters such as \r\n \x1b \ufffd from string impl and returns a unicode
+    Removes control characters such as \r\n \x1b \\ufffd from string impl and returns a unicode
     string where all control characters have been replaced by a space.
     :param text: expects a unicode string
     :return: unicode string
@@ -737,12 +739,12 @@ def fix_characters_in_string(text):
     new_text = fix_encoding(text)
 
     # remove unicode characters from "Specials" block
-     # see: https://www.compart.com/en/unicode/block/U+FFF0
-    new_text = re.sub(r"\\ufff.", " ", new_text.encode("unicode-escape"))
+    # see: https://www.compart.com/en/unicode/block/U+FFF0
+    new_text = re.sub(r"\\ufff.", " ", new_text).encode("unicode-escape")
 
     # remove all kinds of control characters and emojis
     # see: https://www.fileformat.info/info/unicode/category/index.htm
-    new_text = u"".join(ch if unicodedata.category(ch)[0] != "C" else " " for ch in new_text.decode("unicode-escape"))
+    new_text = "".join(ch if unicodedata.category(ch)[0] != "C" else " " for ch in new_text.decode("unicode-escape"))
 
     return new_text
 
@@ -765,12 +767,11 @@ def fix_name_encoding(name):
 
     try:
         # Apply correct encoding and return unicode string
-        return unicode(make_header(info))
+        return str(make_header(info))
     except UnicodeDecodeError:
         # Undo utf-8 encoding and return unicode string
-        return unicode(name.decode('utf-8'))
+        return str(name.decode('utf-8'))
     except LookupError:
         # Encoding not found, return string as is
         return name
-    return name
 

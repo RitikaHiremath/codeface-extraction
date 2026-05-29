@@ -14,7 +14,9 @@
 #
 # Copyright 2015-2017 by Claus Hunsen <hunsen@fim.uni-passau.de>
 # Copyright 2016, 2018-2019 by Thomas Bock <bockthom@fim.uni-passau.de>
+# Copyright 2026 by Thomas Bock <bockthom@cmu.edu>
 # Copyright 2018 by Barbara Eckl <ecklbarb@fim.uni-passau.de>
+# Copyright 2025 by Maximilian Löffler <s8maloef@stud.uni-saarland.de>
 # All Rights Reserved.
 """
 This file is able to extract developer--artifact relations from the Codeface database.
@@ -22,15 +24,18 @@ This file is able to extract developer--artifact relations from the Codeface dat
 
 import argparse
 import sys
+from logging import getLogger
 from os.path import abspath
 
-from codeface.cli import log
-from codeface.configuration import Configuration
-from codeface.dbmanager import DBManager
-
-import extractions
+from . import extractions
 from csv_writer import csv_writer
+from codeface_utils.dbmanager import DBManager
+from codeface_utils.configuration import Configuration
+from codeface_utils.util import setup_logging
 
+# create logger
+setup_logging()
+log = getLogger(__name__)
 
 ##
 # RUN FOR ALL PROJECTS
@@ -119,7 +124,7 @@ def run():
     # process arguments
     # - First make all the args absolute
     __resdir = abspath(args.resdir)
-    __codeface_conf, __project_conf = map(abspath, (args.config, args.project))
+    __codeface_conf, __project_conf = list(map(abspath, (args.config, args.project)))
     __extract_commit_messages = args.commit_messages
     __extract_impl = args.implementation
     __extract_on_range_level = args.range

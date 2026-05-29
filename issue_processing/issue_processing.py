@@ -18,27 +18,30 @@
 # Copyright 2018-2019 by Anselm Fehnker <fehnker@fim.uni-passau.de>
 # Copyright 2019 by Thomas Bock <bockthom@fim.uni-passau.de>
 # Copyright 2020-2021 by Thomas Bock <bockthom@cs.uni-saarland.de>
+# Copyright 2026 by Thomas Bock <bockthom@cmu.edu>
+# Copyright 2025 by Maximilian Löffler <s8maloef@stud.uni-saarland.de>
 # All Rights Reserved.
 """
 This file is able to extract Github issue data from json files.
 """
 
 import argparse
-import httplib
 import json
 import os
 import sys
-import urllib
 from datetime import datetime, timedelta
+from logging import getLogger
 
-import operator
-from codeface.cli import log
-from codeface.cluster.idManager import idManager
-from codeface.configuration import Configuration
-from codeface.dbmanager import DBManager
+from codeface_utils.cluster.idManager import dbIdManager, csvIdManager
+from codeface_utils.configuration import Configuration
+from codeface_utils.dbmanager import DBManager
 from dateutil import parser as dateparser
 
 from csv_writer import csv_writer
+
+# create logger
+setup_logging()
+log = getLogger(__name__)
 
 # known types from JIRA and GitHub default labels
 known_types = {"bug", "improvement", "enhancement", "new feature", "task", "test", "wish"}
@@ -61,7 +64,7 @@ def run():
 
     # parse arguments
     args = parser.parse_args(sys.argv[1:])
-    __codeface_conf, __project_conf = map(os.path.abspath, (args.config, args.project))
+    __codeface_conf, __project_conf = list(map(os.path.abspath, (args.config, args.project)))
 
     # create configuration
     __conf = Configuration.load(__codeface_conf, __project_conf)
@@ -95,7 +98,7 @@ def load(source_folder):
     """
 
     srcfile = os.path.join(source_folder, "issues.json")
-    log.devinfo("Loading Github issues from file '{}'...".format(srcfile))
+    log.info("Loading Github issues from file '{}'...".format(srcfile))
 
     # check if file exists and exit early if not
     if not os.path.exists(srcfile):
@@ -191,7 +194,7 @@ def lookup_user(user_dict, user):
         user["email"] is None or user["email"] == ""):
 
         # lookup user only if username is not None and not empty
-        if not user["username"] is None and not user["username"] == "":
+        if user["username"] is not None and not user["username"] == "":
             user = user_dict[user["username"]]
 
     return user
@@ -210,8 +213,8 @@ def update_user_dict(user_dict, user):
     if user is None:
         user = create_deleted_user()
 
-    if not user["username"] in user_dict.keys():
-        if not user["username"] is None and not user["username"] == "":
+    if user["username"] not in list(user_dict.keys()):
+        if user["username"] is not None and not user["username"] == "":
             user_dict[user["username"]] = user
     else:
         user_in_dict = user_dict[user["username"]]
@@ -232,7 +235,7 @@ def reformat_issues(issue_data):
     :return: the re-arranged issue data
     """
 
-    log.devinfo("Re-arranging Github issues...")
+    log.info("Re-arranging Github issues...")
 
     # re-process all issues
     for issue in issue_data:
@@ -340,7 +343,7 @@ def merge_issue_events(issue_data):
 
             # as we cannot update the referenced issue during iterating over all issues, we need to save the
             # referenced_by event for the referenced issue temporarily
-            if rel_issue["number"] in issue_data_to_update.keys():
+            if rel_issue["number"] in list(issue_data_to_update.keys()):
                 issue_data_to_update[rel_issue["number"]]["eventsList"].append(referenced_issue_event)
             else:
                 ref = dict()
@@ -422,7 +425,7 @@ def merge_issue_events(issue_data):
         # add dismissal comments to the list of comments
         for event in issue["eventsList"]:
 
-            if (event["event"] == "review_dismissed" and not event["dismissalMessage"] is None
+            if (event["event"] == "review_dismissed" and event["dismissalMessage"] is not None
                and not event["dismissalMessage"] == ""):
                 dismissalComment = dict()
                 dismissalComment["event"] = "commented"
@@ -500,7 +503,7 @@ def merge_issue_events(issue_data):
         issue["eventsList"] = sorted(issue["eventsList"], key=lambda k: k["created_at"])
 
     # updates all the issues by the temporarily stored referenced_by events
-    for key, value in issue_data_to_update.iteritems():
+    for _, value in issue_data_to_update.items():
         for issue in issue_data:
             if issue["number"] == value["number"]:
                 issue["eventsList"] = issue["eventsList"] + value["eventsList"]
@@ -535,7 +538,7 @@ def reformat_events(issue_data):
             users = update_user_dict(users, event["user"])
 
             # 3) add or update users which are ref_target of the current event
-            if not event["ref_target"] is None and not event["ref_target"] == "":
+            if event["ref_target"] is not None and not event["ref_target"] == "":
                 users = update_user_dict(users, event["ref_target"])
 
     # as the user dictionary is created, start re-formating the event information of all issues
@@ -636,7 +639,7 @@ def reformat_events(issue_data):
                 event["event_info_1"] = issue["state_new"]
                 event["event_info_2"] = issue["resolution"]
 
-            elif event["event"] == "referenced" and not event["commit"] is None:
+            elif event["event"] == "referenced" and event["commit"] is not None:
                 # remove "referenced" events originating from commits
                 # as they are handled as referenced commit
                 events_to_remove.append(event)
@@ -670,10 +673,13 @@ def insert_user_data(issues, conf, resdir):
     user_id_buffer = dict()
     # create buffer for usernames (key: username)
     username_id_buffer = dict()
-    # open database connection
-    dbm = DBManager(conf)
-    # open ID-service connection
-    idservice = idManager(dbm, conf)
+
+    # connect to ID service
+    if conf["useCsv"]:
+        idservice = csvIdManager(conf)
+    else:
+        dbm = DBManager(conf)
+        idservice = dbIdManager(dbm, conf)
 
     def get_user_string(name, email):
         if not email or email is None:
@@ -683,26 +689,24 @@ def insert_user_data(issues, conf, resdir):
             return "{name} <{email}>".format(name=name, email=email)
 
     def get_id_and_update_user(user, buffer_db_ids=user_id_buffer, buffer_usernames=username_id_buffer):
-        username = unicode(user["username"]).encode("utf-8")
 
-        # fix encoding for name and e-mail address
-        if user["name"] is not None:
-            name = unicode(user["name"]).encode("utf-8")
-        else:
-            name = username
-        mail = unicode(user["email"]).encode("utf-8")
+        # ensure string representation for name and e-mail address
+        username = str(user["username"])
+        name = str(user["name"]) if "name" in user else username
+        mail = str(user["email"])
+
         # construct string for ID service and send query
         user_string = get_user_string(name, mail)
 
         # check buffer to reduce amount of DB queries
         if user_string in buffer_db_ids:
-            log.devinfo("Returning person id for user '{}' from buffer.".format(user_string))
+            log.info("Returning person id for user '{}' from buffer.".format(user_string))
             if username is not None:
                 buffer_usernames[username] = buffer_db_ids[user_string]
             return buffer_db_ids[user_string]
 
         # get person information from ID service
-        log.devinfo("Passing user '{}' to ID service.".format(user_string))
+        log.info("Passing user '{}' to ID service.".format(user_string))
         idx = idservice.getPersonID(user_string)
 
         # add user information to buffer
@@ -719,16 +723,17 @@ def insert_user_data(issues, conf, resdir):
 
         # check whether user information is in buffer to reduce amount of DB queries
         if idx in buffer_db:
-            log.devinfo("Returning user '{}' from buffer.".format(idx))
+            log.info("Returning user '{}' from buffer.".format(idx))
             return buffer_db[idx]
 
         # get person information from ID service
-        log.devinfo("Passing user id '{}' to ID service.".format(idx))
+        log.info("Passing user id '{}' to ID service.".format(idx))
         person = idservice.getPersonFromDB(idx)
-        user = dict()
-        user["email"] = person["email1"]  # column "email1"
-        user["name"] = person["name"]  # column "name"
-        user["id"] = person["id"]  # column "id"
+        user = {
+            "name": person["name"],
+            "email": person["email1"],
+            "id": person["id"]
+        }
 
         # add user information to buffer
         buffer_db[idx] = user

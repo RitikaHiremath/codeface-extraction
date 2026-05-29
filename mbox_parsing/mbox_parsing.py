@@ -15,6 +15,8 @@
 # Copyright 2017 by Raphael Nömmer <noemmer@fim.uni-passau.de>
 # Copyright 2017-2019 by Claus Hunsen <hunsen@fim.uni-passau.de>
 # Copyright 2018-2019 by Thomas Bock <bockthom@fim.uni-passau.de>
+# Copyright 2026 by Thomas Bock <bockthom@cmu.edu>
+# Copyright 2025 by Maximilian Löffler <s8maloef@stud.uni-saarland.de>
 # All Rights Reserved.
 """
 This file is able to extract artifact occurrences in e-mail within mbox files.
@@ -28,17 +30,20 @@ import os.path
 import shutil
 import sys
 from os.path import abspath
+from logging import getLogger
 
-from codeface.cli import log
-from codeface.configuration import Configuration
 from joblib import Parallel, delayed
 from whoosh import index  # import create_in, open_dir, exists_in
 from whoosh.analysis import StandardAnalyzer
 from whoosh.fields import Schema, TEXT, ID
 from whoosh.qparser import QueryParser
 
+from codeface_utils.configuration import Configuration
 from csv_writer import csv_writer
 
+# create logger
+setup_logging()
+log = getLogger(__name__)
 
 def __get_index(mbox, mbox_path, results_folder, schema, reindex):
     """Initialize the search index (and create it, if needed
@@ -56,25 +61,25 @@ def __get_index(mbox, mbox_path, results_folder, schema, reindex):
     index_path = os.path.join(results_folder, "mbox-index", os.path.basename(mbox_path))
     # 1) if reindexing, remove the index folder
     if os.path.exists(index_path) and reindex:
-        log.devinfo("Removing index from path '{}'...".format(index_path))
+        log.info("Removing index from path '{}'...".format(index_path))
         shutil.rmtree(index_path)
     # 2) Check if we need to create the index for Whoosh full-text search
-    log.devinfo("Checking for index in results folder...")
+    log.info("Checking for index in results folder...")
     if (not os.path.exists(index_path)) or (not index.exists_in(index_path)):
         # 2.1) create index
-        log.devinfo("Creating index for text search in results folder.")
+        log.info("Creating index for text search in results folder.")
         os.makedirs(index_path)  # create path
         index.create_in(index_path, schema)  # initialize as index path
         ix = index.open_dir(index_path)  # open as index path
         writer = ix.writer()
         # add all messages to index
         for message in mbox:
-            writer.add_document(messageID=unicode(message['message-id']), content=__mbox_getbody(message))
+            writer.add_document(messageID=str(message['message-id']), content=__mbox_getbody(message))
         writer.commit()
-        log.devinfo("Index created, parsing will begin now.")
+        log.info("Index created, parsing will begin now.")
     else:
         # 2.2) load index
-        log.devinfo("Index has already been created, parsing will begin right away.")
+        log.info("Index has already been created, parsing will begin right away.")
         ix = index.open_dir(index_path)
 
     return ix
@@ -131,12 +136,12 @@ def __mbox_getbody(message):
         body = message.get_payload(decode=True)
 
     if body is None:
-        log.devinfo(message.get_content_type())
-        log.devinfo(
+        log.info(message.get_content_type())
+        log.info(
             "An image or some other content has been found that cannot be indexed. Message is given an empty body.")
         body = ' '
 
-    return unicode(body, errors="replace")
+    return str(body, errors="replace")
 
 
 def __parse_execute(artifact, schema, my_index, include_filepath):
@@ -149,7 +154,7 @@ def __parse_execute(artifact, schema, my_index, include_filepath):
     :return: a match list of tuples (file name, artifact, message ID)
     """
 
-    log.devinfo("Searching for artifact ({}, {})...".format(artifact[0], artifact[1]))
+    log.info("Searching for artifact ({}, {})...".format(artifact[0], artifact[1]))
 
     result = []
 
@@ -247,7 +252,7 @@ def run():
     args = parser.parse_args(sys.argv[1:])
     __resdir = abspath(args.resdir)
     __maildir = abspath(args.maildir)
-    __codeface_conf, __project_conf = map(abspath, (args.config, args.project))
+    __codeface_conf, __project_conf = list(map(abspath, (args.config, args.project)))
 
     # initialize configuration
     __conf = Configuration.load(__codeface_conf, __project_conf)
