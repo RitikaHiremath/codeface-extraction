@@ -23,7 +23,7 @@ issue data extraction and post-processing, in particular for the processing of G
 # GLOBAL VARIABLES
 ##
 
-# global variables containing all known copilot users and the name and mail adress copilot users will be assigned
+# global variables containing all known copilot users and the name and mail address copilot users will be assigned
 known_copilot_users = {"Copilot", "copilot-pull-request-reviewer[bot]", "copilot-swe-agent[bot]"}
 copilot_unified_name = "Copilot"
 copilot_unified_email = "copilot@example.com"

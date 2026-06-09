@@ -586,7 +586,7 @@ def filter_connected_events(key, value, external_connected_events):
     # if it is an odd number, check if it can be easily matched
     # meaning that exactly half (rounded up) the events occur in the same issue
     if num_issues % 2 == 1 and (num_issues + 1)/2 in occurrences.values():
-        for sub_key, sub_value in occurrences.iteritems():
+        for sub_key, sub_value in occurrences.items():
             # then, assign one of them as an external connected event and proceed as in previous case
             if sub_value == (num_issues + 1)/2:
                 new_entry = dict()
