@@ -517,15 +517,15 @@ def merge_issue_events(issue_data, external_connected_events):
 
             # if event is connected event, create or add to a matching dict entry by matching timestamps, for later reconstruction
             if event["event"] == "connected":
-                if event["created_at"] in connected_events.keys() and connected_events[event["created_at"]]["user"] == event["user"]:
+                if event["created_at"] in list(connected_events.keys()) and connected_events[event["created_at"]]["user"] == event["user"]:
                     # if there is already a connected event at this time by this user, add this event to the list
                     connected_events[event["created_at"]]["issues"].append(issue["number"])
-                elif subtract_seconds_from_time(event["created_at"], 1) in connected_events.keys() \
+                elif subtract_seconds_from_time(event["created_at"], 1) in list(connected_events.keys()) \
                         and connected_events[subtract_seconds_from_time(event["created_at"], 1)]["user"] == event["user"]:
                     # same as above, but accounting for a possible difference in timestamps of 1 second between matching events
                     connected_events[subtract_seconds_from_time(event["created_at"], 1)]["issues"].append(issue["number"])
                     event["created_at"] = subtract_seconds_from_time(event["created_at"], 1)
-                elif subtract_seconds_from_time(event["created_at"], -1) in connected_events.keys() \
+                elif subtract_seconds_from_time(event["created_at"], -1) in list(connected_events.keys()) \
                         and connected_events[subtract_seconds_from_time(event["created_at"], -1)]["user"] == event["user"]:
                     # same as above, with offset calculated in the other direction
                     connected_events[subtract_seconds_from_time(event["created_at"], -1)]["issues"].append(issue["number"])
