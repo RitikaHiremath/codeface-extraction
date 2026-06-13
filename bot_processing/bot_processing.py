@@ -27,6 +27,7 @@ import sys
 from logging import getLogger
 
 from codeface_utils.configuration import Configuration
+from codeface_utils.util import setup_logging
 from csv_writer import csv_writer
 from github_user_utils.github_user_utils import known_copilot_users, generate_botname_variants
 

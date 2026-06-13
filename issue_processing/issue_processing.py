@@ -37,6 +37,7 @@ from logging import getLogger
 from codeface_utils.cluster.idManager import dbIdManager, csvIdManager
 from codeface_utils.configuration import Configuration
 from codeface_utils.dbmanager import DBManager
+from codeface_utils.util import setup_logging
 from dateutil import parser as dateparser
 
 from csv_writer import csv_writer
