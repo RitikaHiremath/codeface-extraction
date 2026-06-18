@@ -40,15 +40,19 @@ def run():
     parser.add_argument( "--output", required= True, help="Custom output directory name" )
     parser.add_argument( "--gitauthority", required= True, help = "path to the cloned gitauthoirty")
     args = parser.parse_args()
- 
-    files = ["commits.list","issues-github.list","bots.list"]
+
+    files = ["commits.list","issues-github.list","bots.list","authors.list","issues-jira.list","issues-zulip.list","emails.list"]
     for file in files:
         # extract data
         all_data = extract_data_per_project(args.projects, args.resdir, file)
+        if not all_data:
+            # if file not present in the project, skip to the next one
+            log.warning(f"No project contained '{file}', skipping.")
+            continue
         # merge and update the issue content
         merged_data = merge_data(all_data,file)
-        # if merged_data is None:
-        #     continue
+        if not merged_data:
+            continue
         # save merged issues
         save_merged(merged_data, args.resdir, args.output, file)
         log.info(f"{file} data successfully merged!")
@@ -61,26 +65,18 @@ def run():
     with open(users_list_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f, delimiter=";")
         writer.writerows(user_data)
-    log.info(f"Saved users.list to {users_list_path}")
-
-    # save combined authors.list (id;name;email) for post-GitAuthority dedup
-    authors_data = extract_authors_for_list(args.projects, args.resdir)
-    authors_list_path = os.path.join(output_dir, "authors.list")
-    with open(authors_list_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f, delimiter=";")
-        writer.writerows(authors_data)
-    log.info(f"Saved authors.list to {authors_list_path}")
+    log.info(f"Saved users data (users.list) to {users_list_path}")
 
     # run gitauthority and save the csv file
     run_gitauthority(args.gitauthority, output_dir, args.output)
 
-    # update saved files("commits.list","issues-github.list","bots.list", "authors.list") and resave them
+    # update saved files and resave them
     update(output_dir, args.output)
 
 
 def extract_data_per_project(project_list, dir,type_data):
     """
-    Extracts each (issues-github.list or commits.list) data from each project and appends to all issues
+    Extracts each file's data from each project and appends to all issues
     """
     all_data = {}
     for project in project_list:
@@ -99,7 +95,7 @@ def extract_data_per_project(project_list, dir,type_data):
 
 def extract_user_data(project_list, dir):
     """
-    extracts data from authors.list and usernames.list
+    Extracts data from authors.list and usernames.list
     The data in all_data contains each row in the format [usernmae,name,email]
     """
     all_data = []
@@ -123,26 +119,6 @@ def extract_user_data(project_list, dir):
             log.info(f"Loaded {len(rows)} rows from '{project}'")
     return all_data
 
-
-def extract_authors_for_list(project_list, dir):
-    """
-    Collect unique (name, email) pairs from all projects' authors.list files and
-    assign new sequential numeric IDs.  Returns rows as [id, name, email].
-    """
-    seen = {}  # (name, email) → assigned id
-    for project in project_list:
-        author_file = os.path.join(dir, project, "proximity", "authors.list")
-        if not os.path.exists(author_file):
-            log.warning(f"File not found: {author_file}")
-            continue
-        with open(author_file, newline="", encoding="utf-8") as f:
-            reader = csv.reader(f, delimiter=";")
-            for row in reader:
-                if row and len(row) >= 3:
-                    key = (row[1].strip(), row[2].strip())
-                    if key not in seen:
-                        seen[key] = len(seen) + 1
-    return [[str(aid), name, email] for (name, email), aid in seen.items()]
       
 def merge_data(all_data, file):
     """
@@ -150,12 +126,24 @@ def merge_data(all_data, file):
     """
     if file == "commits.list":
         return merge_commits(all_data)
-    if file == "issues-github.list":
+    if file == "issues-github.list" or file == "issues-jira.list" or file == "issues-zulip.list":
         return merge_issues(all_data)
-    if file == "bots.list":
-        return merge_bots(all_data)
-    log.error("Incorrect file name!")
+    # General case: just combine the rows line by line.
+    return merge_generic(all_data)
 
+def merge_generic(all_data):
+    """
+    Combines rows from all projects line by line, without any project-specific
+    transformation. Used for files that don't need special handling.
+    """
+    merged = []
+    for rows in all_data.values():
+        for row in rows:
+            if not row:
+                continue
+            merged.append(row)
+    log.info(f"Total merged rows: {len(merged)}")
+    return merged
 
 def run_gitauthority(script: str, dir: str, project_name: str):
     """
@@ -225,23 +213,6 @@ def merge_issues(all_issues):
     log.info(f"Total merged rows: {len(merged)}")
     return merged
 
-def merge_bots(all_bots):
-    """
-    Combines bots.list rows from all projects, deduplicating by entire row.
-    """
-    seen = set()
-    merged = []
-    for rows in all_bots.values():
-        for row in rows:
-            if not row:
-                continue
-            key = tuple(row)
-            if key not in seen:
-                seen.add(key)
-                merged.append(row)
-    log.info(f"Total merged bot rows: {len(merged)}")
-    return merged
-
 def parse_name_email(value):
     """
     Parse a gitAuthority identity string like:
@@ -262,8 +233,8 @@ def parse_gitauthority_csv(rows):
 
     Returns:
         identity_map : dict[(str, str), (str, str)]
-        (orig_name, orig_email) → (canon_name, canon_email)
-        Only contains entries where original and canonical differ.
+        (orig_name, orig_email) → (dealialized_name, dealialized_email)
+        Only contains entries where original and dealialized differ.
     """
     identity_map = {}
 
@@ -272,23 +243,22 @@ def parse_gitauthority_csv(rows):
             continue  # skip header or malformed rows
 
         original  = row[1].strip().strip('"')
-        canonical = row[2].strip().strip('"')
+        dealialized = row[2].strip().strip('"')
 
         orig_name,  orig_email  = parse_name_email(original)
-        canon_name, canon_email = parse_name_email(canonical)
+        dealialized_name, dealialized_email = parse_name_email(dealialized)
 
-        if orig_name != canon_name or orig_email != canon_email:
-            identity_map[(orig_name, orig_email)] = (canon_name, canon_email)
+        if orig_name != dealialized_name or orig_email != dealialized_email:
+            identity_map[(orig_name, orig_email)] = (dealialized_name, dealialized_email)
 
     return identity_map
 
 
-def update_issues_github(git_authority_csv, issues_github_rows):
+def update_issues_github( issues_github_rows, identity_map):
     """
     Update col 9 (name) and col 10 (email) in issues-github.list
-    using canonical identities from gitAuthority CSV.
+    using dealialized identities from gitAuthority CSV.
     """
-    identity_map = parse_gitauthority_csv(git_authority_csv)
 
     updated_rows  = []
     updated_count = 0
@@ -299,10 +269,11 @@ def update_issues_github(git_authority_csv, issues_github_rows):
             continue
 
         new_row = row.copy()
-        canon = identity_map.get(row[9].strip().strip('"'), row[10].strip().strip('"'))
-        if canon:
-            new_row[9]  = canon[0]
-            new_row[10] = canon[1]
+        # dealianlized: 0 -> name , 1 -> email
+        dealialized = identity_map.get((row[9].strip().strip('"'), row[10].strip().strip('"')))
+        if dealialized:
+            new_row[9]  = dealialized[0]
+            new_row[10] = dealialized[1]
             updated_count += 1
 
         updated_rows.append(new_row)
@@ -311,12 +282,11 @@ def update_issues_github(git_authority_csv, issues_github_rows):
     return updated_rows
 
 
-def update_commits(git_authority_csv, commits_rows):
+def update_commits(commits_rows, identity_map):
     """
     Update the two set of user data (cols 2, 3), (cols 5, 6) in commits.list
-    using canonical identities from gitAuthority CSV.
+    using dealialized identities from gitAuthority CSV.
     """
-    identity_map = parse_gitauthority_csv(git_authority_csv)
 
     updated_rows  = []
     updated_count = 0
@@ -327,50 +297,88 @@ def update_commits(git_authority_csv, commits_rows):
             continue
 
         new_row = row.copy()
-
-        canon = identity_map.get(row[2].strip().strip('"'), row[3].strip().strip('"'))
-        if canon:
-            new_row[2] = canon[0]
-            new_row[3] = canon[1]
+        # dealianlized: 0 -> name , 1 -> email
+        dealialized = identity_map.get((row[2].strip().strip('"'), row[3].strip().strip('"')))
+        if dealialized:
+            new_row[2] = dealialized[0]
+            new_row[3] = dealialized[1]
             updated_count += 1
 
-        canon = identity_map.get(row[5].strip().strip('"'), row[6].strip().strip('"'))
-        
-        if canon:
-            new_row[5] = canon[0]
-            new_row[6] = canon[1]
+        # dealianlized: 0 -> name , 1 -> email
+        dealialized = identity_map.get((row[5].strip().strip('"'), row[6].strip().strip('"')))
+        if dealialized:
+            new_row[5] = dealialized[0]
+            new_row[6] = dealialized[1]
 
         updated_rows.append(new_row)
 
     log.info(f"update_commits: {updated_count}/{len(updated_rows)} rows updated")
     return updated_rows
 
-def update_bots(git_authority_csv, bots_rows):
+def update_bots(bots_rows, identity_map):
     """
     Update the user data (cols 0, 1) in bots.list
-    using canonical identities from gitAuthority CSV.
+    using dealialized identities from gitAuthority CSV.
     """
-    identity_map = parse_gitauthority_csv(git_authority_csv)
 
     updated_rows  = []
     updated_count = 0
 
     for row in bots_rows:
-        if not row or len(row) < 7:
+        if not row or len(row) < 2:
             updated_rows.append(row)
             continue
 
         new_row = row.copy()
-
-        canon = identity_map.get(row[0].strip().strip('"'), row[1].strip().strip('"'))
-        
-        if canon:
-            new_row[0] = canon[0]
-            new_row[1] = canon[1]
+        # dealianlized: 0 -> name , 1 -> email
+        dealialized = identity_map.get((row[0].strip().strip('"'), row[1].strip().strip('"')))
+        if dealialized:
+            new_row[0] = dealialized[0]
+            new_row[1] = dealialized[1]
+            updated_count += 1
 
         updated_rows.append(new_row)
 
-    log.info(f"update_commits: {updated_count}/{len(updated_rows)} rows updated")
+    log.info(f"update_bots: {updated_count}/{len(updated_rows)} rows updated")
+    return updated_rows
+
+def update_authors(authors_rows,identity_map):
+    """
+    Update the user data in authors.list
+    using dealialized identities from gitAuthority CSV.
+    """
+
+    updated_rows  = []
+    updated_count = 0
+
+    for row in authors_rows:
+        if not row or len(row) < 3:
+            updated_rows.append(row)
+            continue
+
+        new_row = row.copy()
+        # dealianlized: 0 -> name , 1 -> email
+        dealialized = identity_map.get((row[1].strip().strip('"'), row[2].strip().strip('"')))
+        if dealialized:
+            dealialized_name, dealialized_email = dealialized
+            # find the id of the dealialized data in authors_rows. 
+            dealialized_row = next(
+                (r for r in authors_rows if len(r) >= 3
+                 and r[1].strip().strip('"') == dealialized_name
+                 and r[2].strip().strip('"') == dealialized_email),
+                None
+            )
+            # updating id of the dealized row.
+            if dealialized_row:
+                new_row[0] = dealialized_row[0]
+            # uncomment to update name and email.
+            # new_row[1] = dealialized_name
+            # new_row[2] = dealialized_email
+            updated_count += 1
+
+        updated_rows.append(new_row)
+
+    log.info(f"update_authors: {updated_count}/{len(updated_rows)} rows updated")
     return updated_rows
 
 def update(output_dir, project_name):
@@ -386,15 +394,26 @@ def update(output_dir, project_name):
 
     with open(ga_path, newline="", encoding="utf-8") as f:
         git_authority_csv = list(csv.reader(f, delimiter=";"))
+    identity_map = parse_gitauthority_csv(git_authority_csv)
+    log.info(f"identity_map: {len(identity_map)} dealialized entries")
+
+    # Save identity_map to a CSV for inspection
+    identity_map_path = os.path.join(output_dir, "identity_map_debug.csv")
+    with open(identity_map_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f, delimiter=";")
+        writer.writerow(["orig_name", "orig_email", "dealialized_name", "dealialized_email"])
+        for (orig_name, orig_email), (deal_name, deal_email) in identity_map.items():
+            writer.writerow([orig_name, orig_email, deal_name, deal_email])
+    log.info(f"identity_map saved to {identity_map_path}")
 
     def update_file(path, updater, label):
         """
-        checks if the file exists then runs the command to update the files with dealialized user data.
+        Checks if the file exists then runs the command to update the files with dealialized user data.
         """
         if os.path.exists(path):
             with open(path, newline="", encoding="utf-8") as f:
                 rows = list(csv.reader(f, delimiter=";"))
-            updated = updater(git_authority_csv, rows)
+            updated = updater(rows, identity_map)
             with open(path, "w", newline="", encoding="utf-8") as f:
                 csv.writer(f, delimiter=";", quoting=csv.QUOTE_ALL).writerows(updated)
             log.info(f"{label} saved")
@@ -404,6 +423,7 @@ def update(output_dir, project_name):
     update_file(os.path.join(output_dir, "issues-github.list"), update_issues_github, "issues-github.list")
     update_file(os.path.join(output_dir, "commits.list"), update_commits, "commits.list")
     update_file(os.path.join(output_dir, "bots.list"), update_bots, "bots.list")
+    update_file(os.path.join(output_dir, "authors.list"), update_authors, "authors.list")
 
     log.info("update complete!")
     
