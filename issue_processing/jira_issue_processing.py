@@ -614,7 +614,7 @@ def insert_user_data(issues, conf):
     def get_id_and_update_user(user, buffer_db_ids=user_id_buffer):
 
         # ensure string representation for name and e-mail address
-        name = str(user["name"]) if "name" in user else str(user["username"])
+        name = str(user["name"]) if user["name"] is not None else str(user["username"])
         mail = str(user["email"]) # may be empty
 
         # construct string for ID service and send query

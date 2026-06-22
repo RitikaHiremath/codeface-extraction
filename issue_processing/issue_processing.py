@@ -819,7 +819,7 @@ def insert_user_data(issues, conf, resdir):
 
         # ensure string representation for name and e-mail address
         username = str(user["username"])
-        name = str(user["name"]) if "name" in user else username
+        name = str(user["name"]) if user["name"] is not None else username
         mail = str(user["email"])
 
         # construct string for ID service and send query
