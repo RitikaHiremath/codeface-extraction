@@ -907,11 +907,12 @@ def insert_user_data(issues, conf, resdir):
     lines = []
     for username in username_id_buffer:
         user = get_user_from_id(username_id_buffer[username])
-        lines.append((
-            username,
-            user["name"],
-            user["email"]
-        ))
+        if not username == "None":
+            lines.append((
+                username,
+                user["name"],
+                user["email"]
+            ))
 
     log.info("Dump username list to file...")
     username_dump = os.path.join(resdir, "usernames.list")
