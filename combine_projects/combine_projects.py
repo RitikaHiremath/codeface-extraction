@@ -349,6 +349,7 @@ def update_authors(authors_rows,identity_map):
     """
 
     updated_rows  = []
+    disambiguation_rows = [] 
     updated_count = 0
 
     for row in authors_rows:
@@ -370,16 +371,25 @@ def update_authors(authors_rows,identity_map):
             )
             # updating id of the dealized row.
             if dealialized_row:
+                old_id = row[0]
+                old_name = row[1]
+                old_email = row[2]
+    
                 new_row[0] = dealialized_row[0]
-            # uncomment to update name and email.
-            # new_row[1] = dealialized_name
-            # new_row[2] = dealialized_email
-            updated_count += 1
+                new_row[1] = dealialized_name
+                new_row[2] = dealialized_email
+    
+                if old_id != new_row[0] or old_name != new_row[1] or old_email != new_row[2]:
+                    disambiguation_rows.append([
+                        new_row[0], new_row[1], new_row[2],
+                        old_id, old_name, old_email
+                    ])
+                updated_count += 1
 
         updated_rows.append(new_row)
 
     log.info(f"update_authors: {updated_count}/{len(updated_rows)} rows updated")
-    return updated_rows
+    return updated_rows,disambiguation_rows
 
 def update(output_dir, project_name):
     """
@@ -423,7 +433,22 @@ def update(output_dir, project_name):
     update_file(os.path.join(output_dir, "issues-github.list"), update_issues_github, "issues-github.list")
     update_file(os.path.join(output_dir, "commits.list"), update_commits, "commits.list")
     update_file(os.path.join(output_dir, "bots.list"), update_bots, "bots.list")
-    update_file(os.path.join(output_dir, "authors.list"), update_authors, "authors.list")
+    # handle authors.list separately to also write disambiguation file
+    authors_path = os.path.join(output_dir, "authors.list")
+    if os.path.exists(authors_path):
+        with open(authors_path, newline="", encoding="utf-8") as f:
+            rows = list(csv.reader(f, delimiter=";"))
+        updated_rows, disambiguation_rows = update_authors(rows, identity_map)
+        with open(authors_path, "w", newline="", encoding="utf-8") as f:
+            csv.writer(f, delimiter=";", quoting=csv.QUOTE_ALL).writerows(updated_rows)
+        log.info("authors.list saved")
+        if disambiguation_rows:
+            dis_path = os.path.join(output_dir, "disambiguation-after-db.list")
+            with open(dis_path, "w", newline="", encoding="utf-8") as f:
+                csv.writer(f, delimiter=";", quoting=csv.QUOTE_ALL).writerows(disambiguation_rows)
+            log.info("disambiguation-after-db.list saved")
+    else:
+        log.warning(f"authors.list not found in {output_dir}")
 
     log.info("update complete!")
     
