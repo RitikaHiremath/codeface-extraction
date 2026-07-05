@@ -36,12 +36,12 @@ log = getLogger(__name__)
 def run():
     parser = argparse.ArgumentParser(description="Merge issues-github.list files")
     parser.add_argument( "--resdir", required=True, help="Path to data/results/threemonth/" )
-    parser.add_argument( "--projects", nargs="+", required=True, help="One or more project folder names, e.g. vue_proximity keras_proximity" )
+    parser.add_argument( "--projects", nargs="+", required=True, help="One or more project folder names, e.g. project1_proximity project2_proximity" )
     parser.add_argument( "--output", required= True, help="Custom output directory name" )
-    parser.add_argument( "--gitauthority", required= True, help = "path to the cloned gitauthoirty")
+    parser.add_argument( "--gitauthority", required= True, help = "path to the cloned gitauthority")
     args = parser.parse_args()
 
-    files = ["commits.list","issues-github.list","bots.list","authors.list","issues-jira.list","issues-zulip.list","emails.list"]
+    files = ["commits.list", "issues-github.list", "bots.list", "authors.list", "issues-jira.list", "issues-zulip.list", "emails.list"]
     for file in files:
         # extract data
         all_data = extract_data_per_project(args.projects, args.resdir, file)
@@ -158,7 +158,7 @@ def run_gitauthority(script: str, dir: str, project_name: str):
            "--name", clean_name,
            "--output-dir", str(dir),
            "--drop-boolean-column"]
-    print(f"[gitauthority] Running: {' '.join(cmd)}")
+    log.info(f"[gitauthority] Running: {' '.join(cmd)}")
     subprocess.run(cmd, check=True, cwd=str(script_path.parent))
 
 
@@ -174,7 +174,7 @@ def merge_commits(all_commits):
                 continue
             new_row = row.copy()
             new_row[0] = f"{short_name}-{new_row[0]}"
-            # update row 12 only if its not empty
+            # update column 12 only if its not empty
             if new_row[12] != "":
                 new_row[12] =f"{short_name}/{new_row[12]}"
         merged_commits.append(new_row)
@@ -192,10 +192,10 @@ def merge_issues(all_issues):
             if not row:
                 continue
             new_row = row.copy()
-            # Updating firts row: 1 -> keras-1
+            # Updating firts row: 1 -> project1-1
             new_row[0] = f"{short_name}-{new_row[0]}"
             
-            # Checking last row is indeed """issue""" then updating the last but one row: 3885 -> keras-3885
+            # Checking last row is indeed """issue""" then updating the last but one row: 3885 -> project1-3885
             last_col = new_row[13].strip().strip('"')
             # checking if the 8th Column is "connected"
             connected_col = new_row[8].strip().strip('"')
