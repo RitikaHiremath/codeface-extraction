@@ -41,7 +41,7 @@ def run():
     parser.add_argument( "--gitauthority", required= True, help = "path to the cloned gitauthority")
     args = parser.parse_args()
 
-    files = ["commits.list", "issues-github.list", "bots.list", "authors.list", "issues-jira.list", "issues-zulip.list", "emails.list"]
+    files = ["commits.list", "issues-github.list", "bots.list", "authors.list", "issues-jira.list", "issues-zulip.list", "emails.list", "usernames.list", "commitMessages.list"]
     for file in files:
         # extract data
         all_data = extract_data_per_project(args.projects, args.resdir, file)
@@ -177,7 +177,7 @@ def merge_commits(all_commits):
             # update column 12 only if its not empty
             if new_row[12] != "":
                 new_row[12] =f"{short_name}/{new_row[12]}"
-        merged_commits.append(new_row)
+            merged_commits.append(new_row)
 
     return merged_commits
 
@@ -349,8 +349,9 @@ def update_authors(authors_rows,identity_map):
     """
 
     updated_rows  = []
-    disambiguation_rows = [] 
+    disambiguation_rows = []
     updated_count = 0
+    seen_ids = set()
 
     for row in authors_rows:
         if not row or len(row) < 3:
@@ -362,7 +363,7 @@ def update_authors(authors_rows,identity_map):
         dealialized = identity_map.get((row[1].strip().strip('"'), row[2].strip().strip('"')))
         if dealialized:
             dealialized_name, dealialized_email = dealialized
-            # find the id of the dealialized data in authors_rows. 
+            # find the id of the dealialized data in authors_rows.
             dealialized_row = next(
                 (r for r in authors_rows if len(r) >= 3
                  and r[1].strip().strip('"') == dealialized_name
@@ -374,11 +375,11 @@ def update_authors(authors_rows,identity_map):
                 old_id = row[0]
                 old_name = row[1]
                 old_email = row[2]
-    
+
                 new_row[0] = dealialized_row[0]
                 new_row[1] = dealialized_name
                 new_row[2] = dealialized_email
-    
+
                 if old_id != new_row[0] or old_name != new_row[1] or old_email != new_row[2]:
                     disambiguation_rows.append([
                         new_row[0], new_row[1], new_row[2],
@@ -386,6 +387,10 @@ def update_authors(authors_rows,identity_map):
                     ])
                 updated_count += 1
 
+        # multiple rows can dealialize to the same id; keep only the first.
+        if new_row[0] in seen_ids:
+            continue
+        seen_ids.add(new_row[0])
         updated_rows.append(new_row)
 
     log.info(f"update_authors: {updated_count}/{len(updated_rows)} rows updated")
