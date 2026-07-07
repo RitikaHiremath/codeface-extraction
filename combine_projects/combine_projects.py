@@ -157,6 +157,7 @@ def run_gitauthority(script: str, dir: str, project_name: str):
            "--file", str(input_file),
            "--name", clean_name,
            "--output-dir", str(dir),
+           "--username",
            "--drop-boolean-column"]
     log.info(f"[gitauthority] Running: {' '.join(cmd)}")
     subprocess.run(cmd, check=True, cwd=str(script_path.parent))
@@ -252,6 +253,34 @@ def parse_gitauthority_csv(rows):
             identity_map[(orig_name, orig_email)] = (dealialized_name, dealialized_email)
 
     return identity_map
+
+
+def extract_usernames(rows):
+    """
+    Build a deduplicated username;name;email list from the gitAuthority CSV.
+    Column layout (with --username --drop-boolean-column):
+        project ; original_author_id ; dealialized_author_id ; username
+    Only rows with a non-empty username are kept.
+    """
+    seen = set()
+    usernames = []
+
+    for row in rows:
+        if len(row) < 4 or row[1].strip().strip('"') == "original_author_id":
+            continue  # skip header or malformed rows
+
+        username = row[3].strip().strip('"')
+        if not username:
+            continue
+
+        name, email = parse_name_email(row[2].strip().strip('"'))
+        entry = (username, name, email)
+        if entry in seen:
+            continue
+        seen.add(entry)
+        usernames.append(list(entry))
+
+    return usernames
 
 
 def update_issues_github( issues_github_rows, identity_map):
@@ -420,6 +449,13 @@ def update(output_dir, project_name):
         for (orig_name, orig_email), (deal_name, deal_email) in identity_map.items():
             writer.writerow([orig_name, orig_email, deal_name, deal_email])
     log.info(f"identity_map saved to {identity_map_path}")
+
+    # rebuild usernames.list from the gitAuthority output, deduplicated
+    usernames_rows = extract_usernames(git_authority_csv)
+    usernames_path = os.path.join(output_dir, "usernames.list")
+    with open(usernames_path, "w", newline="", encoding="utf-8") as f:
+        csv.writer(f, delimiter=";", quoting=csv.QUOTE_ALL).writerows(usernames_rows)
+    log.info(f"usernames.list saved with {len(usernames_rows)} unique rows")
 
     def update_file(path, updater, label):
         """
