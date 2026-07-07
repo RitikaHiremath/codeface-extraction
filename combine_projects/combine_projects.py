@@ -416,6 +416,10 @@ def update_authors(authors_rows,identity_map):
                     ])
                 updated_count += 1
 
+        # skip rows without an author name.
+        if not new_row[1] or not new_row[1].strip().strip('"'):
+            continue
+
         # multiple rows can dealialize to the same id; keep only the first.
         if new_row[0] in seen_ids:
             continue
