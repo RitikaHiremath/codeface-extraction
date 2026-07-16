@@ -114,7 +114,7 @@ def extract_user_data(project_list, dir):
                 if type_data == "authors.list":
                     rows = [[row[1], row[2],""] for row in reader if row]
                 else:
-                    rows = [[row[1], row[2], row[0]] for row in reader if row]
+                    rows = [[row[1], row[2], row[0]] for row in reader if row and not row[0] == "None"]
             all_data.extend(rows)
             log.info(f"Loaded {len(rows)} rows from '{project}'")
     return all_data
@@ -270,7 +270,7 @@ def extract_usernames(rows):
             continue  # skip header or malformed rows
 
         username = row[3].strip().strip('"')
-        if not username:
+        if not username or (username.lower() == "none"):
             continue
 
         name, email = parse_name_email(row[2].strip().strip('"'))
@@ -283,7 +283,7 @@ def extract_usernames(rows):
     return usernames
 
 
-def update_issues_github( issues_github_rows, identity_map):
+def update_issues_github(issues_github_rows, identity_map):
     """
     Update col 9 (name) and col 10 (email) in issues-github.list
     using dealialized identities from gitAuthority CSV.
@@ -380,7 +380,7 @@ def update_authors(authors_rows,identity_map):
     updated_rows  = []
     disambiguation_rows = []
     updated_count = 0
-    seen_ids = set()
+    seen_identities = set()
 
     for row in authors_rows:
         if not row or len(row) < 3:
@@ -420,10 +420,11 @@ def update_authors(authors_rows,identity_map):
         if not new_row[1] or not new_row[1].strip().strip('"'):
             continue
 
-        # multiple rows can dealialize to the same id; keep only the first.
-        if new_row[0] in seen_ids:
+        # the same user data can have different ids (e.g. merged from different projects), so dedupe by identity(name, email), not id.
+        identity = (new_row[1].strip().strip('"'), new_row[2].strip().strip('"'))
+        if identity in seen_identities:
             continue
-        seen_ids.add(new_row[0])
+        seen_identities.add(identity)
         updated_rows.append(new_row)
 
     log.info(f"update_authors: {updated_count}/{len(updated_rows)} rows updated")
